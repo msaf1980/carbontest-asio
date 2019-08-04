@@ -1,0 +1,10 @@
+[requires]
+#boost/1.69.0@conan/stable
+cmake_findboost_modular/1.69.0@bincrafters/stable
+cxxopts/2.2.0@local/stable
+
+[options]
+Boost:shared=False
+
+[generators]
+cmake
