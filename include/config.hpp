@@ -1,8 +1,8 @@
 #ifndef _CONFIG_HPP_
 #define _CONFIG_HPP_
 
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include <atomic>
 #include <string>
@@ -10,19 +10,21 @@
 extern std::atomic_bool running; // running flag
 
 struct Config {
-	// Addr string
+	std::string Host;
+	int         Port;
+
 	int Duration; // Test duration in seconds
 
-	size_t Workers; // TCP Workers
-	// MetricPerCon int
-	// BatchSend    int
-	// RateLimit    []int32
-	// SendDelay   time.Duration
-	// ConTimeout  time.Duration
-	// SendTimeout time.Duration
+	int Workers;      // TCP Workers
+	int MetricPerCon; // Metrics, sended in one connection (TCP)
 
-	size_t UWorkers; // UDP Workers
-	                 // UBatchSend  int
+	int UWorkers; // UDP Workers
+
+	// RateLimit    []int32
+	int SendDelay; // Send delay in milliseconds
+
+	int ConTimeout;  // Connection timeout
+	int SendTimeout; // Send timeout
 
 	std::string MetricPrefix; // Prefix for generated metric name
 

@@ -60,15 +60,6 @@ set ( BINARY ${PROJECT} )
 
 project( ${PROJECT} )
 
-find_package(Boost COMPONENTS system thread fiber REQUIRED)
-
-set ( LIBRARIES
-    boost_system
-    boost_thread
-    boost_fiber
-    pthread
-)
-
 # Include cmake script from cmake dir
 file(GLOB cmakeFiles ${DIR_SCRIPT}/*.cmake)
 foreach(cmakeFile ${cmakeFiles})
@@ -76,13 +67,27 @@ foreach(cmakeFile ${cmakeFiles})
     INCLUDE(${cmakeFile})
 endforeach(cmakeFile)
 
+#find_package( Boost COMPONENTS system thread fiber REQUIRED )
+find_package( Boost COMPONENTS system thread fiber context stacktrace_basic REQUIRED )
+find_package( fmt REQUIRED CONFIG )
+
+set ( LIBRARIES
+    boost_system
+    boost_thread
+    boost_fiber
+    boost_context
+    boost_stacktrace_basic
+    fmt
+    pthread
+)
+
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 if ( DEFINED DIR_INCLUDES )
     # Includes in separate directory
-    include_directories( ${DIR_INCLUDES} ${Boost_INCLUDE_DIRS} )
+    include_directories( ${DIR_INCLUDES} ${Boost_INCLUDE_DIRS} ${fmt_INCLUDE_DIRS} )
 endif()
 
 #Scan dir for standart source files
@@ -94,13 +99,15 @@ aux_source_directory( ${DIR_SOURCES} SOURCES )
 #    ${DIR_SOURCES}/palindrom.cpp
 #)
 
-
 # Add executable target
 add_executable( ${BINARY} ${SOURCES} )
 #target_include_directories( ${BINARY} ${DIR_INCLUDES} )
 if(LIBRARIES)
     target_link_libraries ( ${BINARY} ${LIBRARIES} )
 endif()
+#if (FMT_HEADER_ONLY)
+#    target_compile_definitions(${BINARY} PRIVATE FMT_HEADER_ONLY=1)
+#endif(FMT_HEADER_ONLY)
 set_target_properties( ${BINARY} PROPERTIES COTIRE_ADD_UNITY_BUILD FALSE )
 cotire( ${BINARY} )
 
