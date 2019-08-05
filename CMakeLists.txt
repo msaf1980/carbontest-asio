@@ -67,17 +67,13 @@ foreach(cmakeFile ${cmakeFiles})
     INCLUDE(${cmakeFile})
 endforeach(cmakeFile)
 
-#find_package( Boost COMPONENTS system thread fiber REQUIRED )
-find_package( Boost COMPONENTS system thread fiber context stacktrace_basic REQUIRED )
-find_package( fmt REQUIRED CONFIG )
-
 set ( LIBRARIES
     boost_system
     boost_thread
     boost_fiber
     boost_context
-    boost_stacktrace_basic
     fmt
+    ${CONAN_LIBS_LOG4CPLUS}
     pthread
 )
 
@@ -115,7 +111,7 @@ if(DEFINED ENV{DEVENV})
 	set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 endif()
 
-INSTALL( TARGETS ${BINARY} DESTINATION ${DIR_BIN} )
+INSTALL( TARGETS ${BINARY} DESTINATION ${BINDIR} )
 
 enable_testing()
 

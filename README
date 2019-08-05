@@ -2,7 +2,7 @@ Instructions for build
 
 Prepare conan repos
 $
-conan remote add bincrafters https://api.bintray.com/conan/bincrafters/public-conan
+conan remote add conan-center "https://conan.bintray.com"
 
 git clone https://github.com/darcamo/conan-cxxopts
 cd conan-cxxopts && conan create . local/stable
