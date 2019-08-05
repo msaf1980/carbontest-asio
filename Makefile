@@ -68,16 +68,15 @@ install/fast: preinstall/fast
 	/usr/bin/cmake -P cmake_install.cmake
 .PHONY : install/fast
 
-# Special rule for the target test
-test:
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running tests..."
-	/usr/bin/ctest --force-new-ctest-process $(ARGS)
-.PHONY : test
+# Special rule for the target list_install_components
+list_install_components:
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Available install components are: \"Unspecified\""
+.PHONY : list_install_components
 
-# Special rule for the target test
-test/fast: test
+# Special rule for the target list_install_components
+list_install_components/fast: list_install_components
 
-.PHONY : test/fast
+.PHONY : list_install_components/fast
 
 # Special rule for the target edit_cache
 edit_cache:
@@ -101,17 +100,16 @@ rebuild_cache/fast: rebuild_cache
 
 .PHONY : rebuild_cache/fast
 
-# Special rule for the target install/local
-install/local: preinstall
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Installing only the local directory..."
-	/usr/bin/cmake -DCMAKE_INSTALL_LOCAL_ONLY=1 -P cmake_install.cmake
-.PHONY : install/local
+# Special rule for the target test
+test:
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running tests..."
+	/usr/bin/ctest --force-new-ctest-process $(ARGS)
+.PHONY : test
 
-# Special rule for the target install/local
-install/local/fast: preinstall/fast
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Installing only the local directory..."
-	/usr/bin/cmake -DCMAKE_INSTALL_LOCAL_ONLY=1 -P cmake_install.cmake
-.PHONY : install/local/fast
+# Special rule for the target test
+test/fast: test
+
+.PHONY : test/fast
 
 # Special rule for the target install/strip
 install/strip: preinstall
@@ -125,15 +123,17 @@ install/strip/fast: preinstall/fast
 	/usr/bin/cmake -DCMAKE_INSTALL_DO_STRIP=1 -P cmake_install.cmake
 .PHONY : install/strip/fast
 
-# Special rule for the target list_install_components
-list_install_components:
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Available install components are: \"Unspecified\""
-.PHONY : list_install_components
+# Special rule for the target install/local
+install/local: preinstall
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Installing only the local directory..."
+	/usr/bin/cmake -DCMAKE_INSTALL_LOCAL_ONLY=1 -P cmake_install.cmake
+.PHONY : install/local
 
-# Special rule for the target list_install_components
-list_install_components/fast: list_install_components
-
-.PHONY : list_install_components/fast
+# Special rule for the target install/local
+install/local/fast: preinstall/fast
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Installing only the local directory..."
+	/usr/bin/cmake -DCMAKE_INSTALL_LOCAL_ONLY=1 -P cmake_install.cmake
+.PHONY : install/local/fast
 
 # The main all target
 all: cmake_check_build_system
@@ -168,30 +168,30 @@ depend:
 .PHONY : depend
 
 #=============================================================================
-# Target rules for targets named clean_cotire
+# Target rules for targets named carbontestcpp
 
 # Build rule for target.
-clean_cotire: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 clean_cotire
-.PHONY : clean_cotire
+carbontestcpp: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 carbontestcpp
+.PHONY : carbontestcpp
 
 # fast build rule for target.
-clean_cotire/fast:
-	$(MAKE) -f CMakeFiles/clean_cotire.dir/build.make CMakeFiles/clean_cotire.dir/build
-.PHONY : clean_cotire/fast
+carbontestcpp/fast:
+	$(MAKE) -f CMakeFiles/carbontestcpp.dir/build.make CMakeFiles/carbontestcpp.dir/build
+.PHONY : carbontestcpp/fast
 
 #=============================================================================
-# Target rules for targets named all_pch
+# Target rules for targets named clang-tidy
 
 # Build rule for target.
-all_pch: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 all_pch
-.PHONY : all_pch
+clang-tidy: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 clang-tidy
+.PHONY : clang-tidy
 
 # fast build rule for target.
-all_pch/fast:
-	$(MAKE) -f CMakeFiles/all_pch.dir/build.make CMakeFiles/all_pch.dir/build
-.PHONY : all_pch/fast
+clang-tidy/fast:
+	$(MAKE) -f CMakeFiles/clang-tidy.dir/build.make CMakeFiles/clang-tidy.dir/build
+.PHONY : clang-tidy/fast
 
 #=============================================================================
 # Target rules for targets named benchmarks
@@ -218,45 +218,6 @@ cppcheck: cmake_check_build_system
 cppcheck/fast:
 	$(MAKE) -f CMakeFiles/cppcheck.dir/build.make CMakeFiles/cppcheck.dir/build
 .PHONY : cppcheck/fast
-
-#=============================================================================
-# Target rules for targets named carbontestcpp
-
-# Build rule for target.
-carbontestcpp: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 carbontestcpp
-.PHONY : carbontestcpp
-
-# fast build rule for target.
-carbontestcpp/fast:
-	$(MAKE) -f CMakeFiles/carbontestcpp.dir/build.make CMakeFiles/carbontestcpp.dir/build
-.PHONY : carbontestcpp/fast
-
-#=============================================================================
-# Target rules for targets named carbontestcpp_pch
-
-# Build rule for target.
-carbontestcpp_pch: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 carbontestcpp_pch
-.PHONY : carbontestcpp_pch
-
-# fast build rule for target.
-carbontestcpp_pch/fast:
-	$(MAKE) -f CMakeFiles/carbontestcpp_pch.dir/build.make CMakeFiles/carbontestcpp_pch.dir/build
-.PHONY : carbontestcpp_pch/fast
-
-#=============================================================================
-# Target rules for targets named clang-tidy
-
-# Build rule for target.
-clang-tidy: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 clang-tidy
-.PHONY : clang-tidy
-
-# fast build rule for target.
-clang-tidy/fast:
-	$(MAKE) -f CMakeFiles/clang-tidy.dir/build.make CMakeFiles/clang-tidy.dir/build
-.PHONY : clang-tidy/fast
 
 src/client.o: src/client.cpp.o
 
@@ -373,19 +334,16 @@ help:
 	@echo "... clean"
 	@echo "... depend"
 	@echo "... install"
-	@echo "... clean_cotire"
-	@echo "... all_pch"
-	@echo "... test"
+	@echo "... list_install_components"
 	@echo "... edit_cache"
-	@echo "... benchmarks"
-	@echo "... cppcheck"
-	@echo "... carbontestcpp"
 	@echo "... rebuild_cache"
-	@echo "... install/local"
-	@echo "... carbontestcpp_pch"
+	@echo "... carbontestcpp"
+	@echo "... test"
 	@echo "... clang-tidy"
 	@echo "... install/strip"
-	@echo "... list_install_components"
+	@echo "... install/local"
+	@echo "... benchmarks"
+	@echo "... cppcheck"
 	@echo "... src/client.o"
 	@echo "... src/client.i"
 	@echo "... src/client.s"

@@ -109,7 +109,7 @@ endif()
 #    target_compile_definitions(${BINARY} PRIVATE FMT_HEADER_ONLY=1)
 #endif(FMT_HEADER_ONLY)
 set_target_properties( ${BINARY} PROPERTIES COTIRE_ADD_UNITY_BUILD FALSE )
-cotire( ${BINARY} )
+#cotire( ${BINARY} )
 
 if(DEFINED ENV{DEVENV})
 	set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
