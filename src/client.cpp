@@ -27,11 +27,7 @@ void clientTCPThread(const Config &config, ClientData &data, barrier &wb) {
 
 	boost::asio::io_context   io_context;
 	boost::system::error_code ec;
-	tcp::resolver             resolver(io_context);
-	tcp::resolver::query      query(
-        config.Host, config.Port,
-        boost::asio::ip::resolver_query_base::numeric_service);
-	tcp::resolver::iterator endpoints = resolver.resolve(query);
+	tcp::endpoint endpoint(boost::asio::ip::address::from_string(config.Host), config.Port);
 	tcp::socket             socket(io_context);
 
 	fmt::memory_buffer out;
@@ -43,7 +39,7 @@ void clientTCPThread(const Config &config, ClientData &data, barrier &wb) {
 		format_to(out, "{:s} {:d} {:d}\n", metricPrefix, 1, 12);
 		mutable_buffer buf(out.data(), out.size());
 		// std::cout << "TCP " << out.data() << std::endl;
-		socket.connect(*endpoints, ec);
+		socket.connect(endpoint, ec);
 		if (ec) {
 			// An error occurred.
 		} else {
