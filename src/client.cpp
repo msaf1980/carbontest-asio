@@ -13,6 +13,8 @@
 
 #include <boost/asio/buffer.hpp>
 
+#include <concurrentqueue.h>
+
 #include <fmt/format.h>
 
 #include <plog/Log.h>

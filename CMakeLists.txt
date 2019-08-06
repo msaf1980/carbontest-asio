@@ -82,7 +82,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 if ( DEFINED DIR_INCLUDES )
     # Includes in separate directory
-    include_directories( ${DIR_INCLUDES} ${Boost_INCLUDE_DIRS} ${fmt_INCLUDE_DIRS} ${plog_INCLUDE_DIRS} )
+    include_directories( ${DIR_INCLUDES} ${Boost_INCLUDE_DIRS} ${fmt_INCLUDE_DIRS} ${plog_INCLUDE_DIRS} concurrentqueue )
 endif()
 
 #Scan dir for standart source files

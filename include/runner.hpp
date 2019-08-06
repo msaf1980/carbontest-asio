@@ -1,9 +1,10 @@
 #ifndef _RUNNER_HPP_
 #define _RUNNER_HPP_
 
+#include <boost/thread.hpp>
+
 #include <client.hpp>
 #include <config.hpp>
-#include <boost/thread.hpp>
 
 struct Thread {
 	struct ClientData data;
