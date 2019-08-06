@@ -6,11 +6,6 @@
 #include <boost/asio/use_future.hpp>
 #include <boost/fiber/barrier.hpp>
 
-#include <log4cplus/configurator.h>
-#include <log4cplus/initializer.h>
-#include <log4cplus/logger.h>
-#include <log4cplus/loggingmacros.h>
-
 #include <runner.hpp>
 
 using boost::thread;
@@ -20,15 +15,6 @@ using boost::fibers::barrier;
 using std::string;
 
 void runClients(const Config &config) {
-	log4cplus::Initializer initializer;
-
-	log4cplus::BasicConfigurator logConfig;
-	logConfig.configure();
-
-	log4cplus::Logger logger =
-	    log4cplus::Logger::getInstance(LOG4CPLUS_TEXT("main"));
-	LOG4CPLUS_WARN(logger, LOG4CPLUS_TEXT("Starting"));
-
 	int threadsCount = config.Workers + config.UWorkers;
 	Thread *threads = new Thread[threadsCount];
 	int last = 0;

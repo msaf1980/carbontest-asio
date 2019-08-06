@@ -73,7 +73,7 @@ set ( LIBRARIES
     boost_fiber
     boost_context
     fmt
-    ${CONAN_LIBS_LOG4CPLUS}
+    log4cpp
     pthread
 )
 

@@ -8,6 +8,11 @@ git clone https://github.com/darcamo/conan-cxxopts
 cd conan-cxxopts && conan create . local/stable
 cd .. && rm -rf conan-cxxopts
 
+pip install common --user
+git clone https://github.com/msaf1980/conan-orocos-log4cpp
+cd conan-orocos-log4cpp && conan create . local/stable
+cd .. && rm -rf conan-orocos-log4cpp
+
 Build
 $
 mkdir target
