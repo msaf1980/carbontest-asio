@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 
@@ -18,12 +19,12 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 	options.add_options()
 		("h,help", "Print help")
 		("l,loglevel", "Log level",
-	                      cxxopts::value<string>()->default_value("INFO"))
+	                      cxxopts::value<string>()->default_value("WARN"))
 		("H,host", "IP Address to connect",
 	                      cxxopts::value<string>()->default_value("127.0.0.1"))
-		("P,port", "Port to connect",
+		("p,port", "Port to connect",
 	                      cxxopts::value<int>()->default_value("2003"))
-		("p,prefix", "Metric prefix",
+		("P,prefix", "Metric prefix",
 	                      cxxopts::value<string>()->default_value("test"))
 		("d,duration", "Test duration (in seconds)",
 	                      cxxopts::value<int>()->default_value("10"))
@@ -92,6 +93,15 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 		arg = "send_timeout";
 		config.SendTimeout = result[arg].as<int>();
 		if (config.SendTimeout < 0)
+			throw std::invalid_argument(arg);
+
+		arg = "loglevel";
+		string logLevel = result[arg].as<string>().c_str();
+		std::transform(logLevel.begin(), logLevel.end(),
+		               logLevel.begin(),
+		               [](unsigned char c) { return std::toupper(c); });
+		config.LogLevel = plog::severityFromString(logLevel.c_str());
+		if (config.LogLevel == plog::Severity::none)
 			throw std::invalid_argument(arg);
 
 	} catch (std::bad_cast &e) {

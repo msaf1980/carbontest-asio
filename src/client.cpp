@@ -15,6 +15,8 @@
 
 #include <fmt/format.h>
 
+#include <plog/Log.h>
+
 #include <client.hpp>
 
 using boost::asio::mutable_buffer;
@@ -24,14 +26,15 @@ using std::string;
 
 void clientTCPThread(const Config &config, ClientData &data, barrier &wb) {
 	wb.wait();
+	LOG_VERBOSE << "Starting TCP thread " << data.Id;
 	try {
-		boost::asio::io_context   io_context;
+		boost::asio::io_context io_context;
 		boost::system::error_code ec;
-		tcp::endpoint             endpoint(
-            boost::asio::ip::address::from_string(config.Host), config.Port);
+		tcp::endpoint endpoint(
+		    boost::asio::ip::address::from_string(config.Host), config.Port);
 		tcp::socket socket(io_context);
 
-		string             metricPrefix =
+		string metricPrefix =
 		    fmt::format("{:s}.{:d}", config.MetricPrefix, data.Id);
 		// string metricString = config.MetricPrefix + "." +
 		// std::to_string(data.Id);
@@ -43,38 +46,40 @@ void clientTCPThread(const Config &config, ClientData &data, barrier &wb) {
 			// std::cout << "TCP " << out.data() << std::endl;
 			socket.connect(endpoint, ec);
 			if (ec) {
-				// An error occurred.
-				std::cerr << "tcp error: " << ec.message() << '\n';
+				LOG_ERROR << "TCP thread socket connect" << data.Id << ": "
+				          << ec.message();
 			} else {
 				size_t len = socket.write_some(buf, ec);
 				if (ec) {
-					// An error occurred.
-					std::cerr << "tcp error: " << ec.message() << '\n';
+					LOG_ERROR << "TCP thread socket write" << data.Id << ": "
+					          << ec.message();
 				}
 				socket.close(ec);
 				if (ec) {
-					// An error occurred.
-					std::cerr << "tcp error: " << ec.message() << '\n';
+					LOG_ERROR << "TCP thread socket close " << data.Id << " "
+					          << ec.message();
 				}
 			}
 		}
 	} catch (std::exception &e) {
 		// log fatal error
-		std::cerr << "fatal error in tcp thread: " << e.what() << '\n';
+		LOG_ERROR << "TCP thread " << data.Id << ": " << e.what();
 	}
 	wb.wait();
+	LOG_VERBOSE << "Shutdown TCP thread " << data.Id;
 }
 
 void clientUDPThread(const Config &config, ClientData &data, barrier &wb) {
 	wb.wait();
+	LOG_VERBOSE << "Starting UDP thread " << data.Id;
 	try {
-		boost::asio::io_context   io_context;
+		boost::asio::io_context io_context;
 		boost::system::error_code ec;
-		udp::endpoint             endpoint(
-            boost::asio::ip::address::from_string(config.Host), config.Port);
+		udp::endpoint endpoint(
+		    boost::asio::ip::address::from_string(config.Host), config.Port);
 		udp::socket socket(io_context);
 
-		string             metricPrefix =
+		string metricPrefix =
 		    fmt::format("{:s}.{:d}", config.MetricPrefix, data.Id);
 		while (running.load()) {
 			fmt::memory_buffer out;
@@ -83,23 +88,27 @@ void clientUDPThread(const Config &config, ClientData &data, barrier &wb) {
 			socket.open(udp::v4(), ec);
 			if (ec) {
 				// An error occurred.
-				std::cerr << "udp error: " << ec.message() << '\n';
+				LOG_ERROR << "UDP thread socket connect" << data.Id << ": "
+				          << ec.message();
 			} else {
 				socket.send_to(buf, endpoint, 0, ec);
 				if (ec) {
 					// An error occurred.
-					std::cerr << "udp error: " << ec.message() << " " << out.size() << '\n';
+					LOG_ERROR << "UDP thread socket write" << data.Id << ": "
+					          << ec.message();
 				}
 				socket.close(ec);
 				if (ec) {
 					// An error occurred.
-					std::cerr << "udp error: " << ec.message() << '\n';
+					LOG_ERROR << "UDP thread socket close" << data.Id << ": "
+					          << ec.message();
 				}
 			}
 		}
 	} catch (std::exception &e) {
 		// log fatal error
-		std::cerr << "fatal error in udp thread: " << e.what() << '\n';
+		LOG_ERROR << "TCP thread " << data.Id << ": " << e.what();
 	}
 	wb.wait();
+	LOG_VERBOSE << "Shutdown UDP thread " << data.Id;
 }

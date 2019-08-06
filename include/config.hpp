@@ -7,11 +7,13 @@
 #include <atomic>
 #include <string>
 
+#include <plog/Severity.h>
+
 extern std::atomic_bool running; // running flag
 
 struct Config {
 	std::string Host;
-	int         Port;
+	int Port;
 
 	int Duration; // Test duration in seconds
 
@@ -27,6 +29,8 @@ struct Config {
 	int SendTimeout; // Send timeout
 
 	std::string MetricPrefix; // Prefix for generated metric name
+
+	plog::Severity LogLevel;
 
 	// Verbose      bool
 

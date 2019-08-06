@@ -6,6 +6,9 @@
 #include <boost/asio/use_future.hpp>
 #include <boost/fiber/barrier.hpp>
 
+#include <plog/Appenders/ConsoleAppender.h>
+#include <plog/Log.h>
+
 #include <runner.hpp>
 
 using boost::thread;
@@ -15,6 +18,12 @@ using boost::fibers::barrier;
 using std::string;
 
 void runClients(const Config &config) {
+	static plog::ConsoleAppender<plog::TxtFormatter> consoleAppender;
+	plog::init(config.LogLevel, &consoleAppender);
+
+	LOG_INFO << "Starting with " << config.Workers << " TCP clients and "
+	          << config.UWorkers << " UDP clients";
+
 	int threadsCount = config.Workers + config.UWorkers;
 	Thread *threads = new Thread[threadsCount];
 	int last = 0;
@@ -38,6 +47,7 @@ void runClients(const Config &config) {
 	wb.wait(); // wait for start
 	sleep(config.Duration);
 
+	LOG_INFO << "Shutting down";
 	running.store(0);
 	wb.wait(); // wait for end
 
