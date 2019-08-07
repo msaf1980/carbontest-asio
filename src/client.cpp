@@ -86,8 +86,8 @@ void clientTCPThread(const Config &config, ClientData &data, barrier &wb,
 		    boost::asio::ip::address::from_string(config.Host), config.Port);
 		tcp::socket socket(io_context);
 
-		string metricPrefix =
-		    fmt::format("{:s}.{:d}", config.MetricPrefix, data.Id);
+		//string metricPrefix =
+		//    fmt::format("{:s}.{:d}", config.MetricPrefix, data.Id);
 
 		NetStat stat;
 		stat.Id = data.Id;
@@ -98,11 +98,16 @@ void clientTCPThread(const Config &config, ClientData &data, barrier &wb,
 		struct timeval timeout;
 		set_timeout_ms(&timeout, config.Timeout);
 
+		char buf_str[1024];
+		//sprintf(buf_str, "%s.%lu ", config.MetricPrefix.c_str(), data.Id);
+		buf_str[sizeof(buf_str)-1] = '\0';
 		while (running.load()) {
-			fmt::memory_buffer out;
-			format_to(out, "{:s} {:d} {:d}\n", metricPrefix, 1, 12);
-			mutable_buffer buf(out.data(), out.size());
+			//fmt::memory_buffer out;
+			//format_to(out, "{:s} {:d} {:d}\n", metricPrefix, 1, 12);
+			//mutable_buffer buf(out.data(), out.size());
 			
+			snprintf(buf_str, sizeof(buf_str)-1, "%s.%lu %d %d\n",config.MetricPrefix.c_str(), data.Id, 1, 12);
+			mutable_buffer buf(buf_str, strlen(buf_str));
 			set_recv_timeout(socket.native_handle(), &con_timeout);
 			set_send_timeout(socket.native_handle(), &con_timeout);
 			auto start = TIME_NOW;
