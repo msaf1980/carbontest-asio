@@ -19,7 +19,7 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 	options.add_options()
 		("h,help", "Print help")
 		("l,loglevel", "Log level",
-	                      cxxopts::value<string>()->default_value("WARN"))
+	                      cxxopts::value<string>()->default_value("INFO"))
 		("H,host", "IP Address to connect",
 	                      cxxopts::value<string>()->default_value("127.0.0.1"))
 		("p,port", "Port to connect",
@@ -36,10 +36,10 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 	                      cxxopts::value<int>()->default_value("0"))
 		("c,con_timeout", "Connection timeout (in milliseconds)",
 	                      cxxopts::value<int>()->default_value("100"))
-		("s,send_timeout", "Send timeout (in milliseconds)",
+		("t,timeout", "Timeout (in milliseconds)",
 	                      cxxopts::value<int>()->default_value("500"))
 		("f,file", "Write statistic to file",
-	                      cxxopts::value<int>()->default_value("test.csv"))
+	                      cxxopts::value<string>()->default_value("test.csv"))
 	;
 	// clang-format on
 
@@ -89,12 +89,12 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 
 		arg = "con_timeout";
 		config.ConTimeout = result[arg].as<int>();
-		if (config.ConTimeout < 0)
+		if (config.ConTimeout < 1)
 			throw std::invalid_argument(arg);
 
-		arg = "send_timeout";
-		config.SendTimeout = result[arg].as<int>();
-		if (config.SendTimeout < 0)
+		arg = "timeout";
+		config.Timeout = result[arg].as<int>();
+		if (config.Timeout < 1)
 			throw std::invalid_argument(arg);
 
 		arg = "loglevel";

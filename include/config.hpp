@@ -26,7 +26,7 @@ struct Config {
 	int SendDelay; // Send delay in milliseconds
 
 	int ConTimeout;  // Connection timeout
-	int SendTimeout; // Send timeout
+	int Timeout; // Send timeout
 
 	std::string MetricPrefix; // Prefix for generated metric name
 

@@ -1,6 +1,7 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <map>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -11,7 +12,7 @@
 #include <plog/Appenders/ConsoleAppender.h>
 #include <plog/Log.h>
 
-//#include <fmt/format.h>
+#include <fmt/format.h>
 
 #include <netstat.hpp>
 #include <runner.hpp>
@@ -22,29 +23,59 @@ using boost::asio::ip::udp;
 using boost::fibers::barrier;
 using std::string;
 
-void dequeueThread(const Config &config, ClientData &data, barrier &wb,
-                   NetStatQueue &queue) {
-	wb.wait();
-	LOG_VERBOSE << "Starting dequeue thread " << data.Id;
-	try {
-		std::ofstream file;
-		file.open (config.StatFile, std::ios::out);
-		file << "timestamp\tConId\tProto\tType\tStatus\tElapsed\tSize\n";
-		NetStat stat;
-		while (running.load()) {
-			if (queue.wait_dequeue_timed(stat, std::chrono::milliseconds(5))) {
-				//"%d\t%d\t%s\t%s\t%s\t%d\t%d\n", r.TimeStamp/1000, r.Id,
-                                        //ProtoToString(r.Proto), NetOperToString(r.Type),
-                                        //NetErrToString(r.Error), r.Elapsed/1000, r.Size
-			}
+chrono_clock start, end;
+std::map<string, uint64_t> stat_count;
+
+bool dequeueStat(const Config &config, std::fstream &file,
+                 NetStatQueue &queue) {
+	NetStat stat;
+	if (queue.wait_dequeue_timed(stat, std::chrono::milliseconds(100))) {
+		string name = fmt::format("{}.{}.{}", NetProtoStr[stat.Proto],
+		                          NetOperStr[stat.Type], NetErrStr[stat.Error]);
+		stat_count[name]++;
+
+		file << stat.TimeStamp << "\t" << stat.Id << "\t"
+		     << NetProtoStr[stat.Proto] << "\t" << NetOperStr[stat.Type] << "\t"
+		     << NetErrStr[stat.Error] << "\t" << stat.Elapsed << "\t"
+		     << stat.Size << "\n";
+
+		if (file.fail()) {
+			throw std::runtime_error(config.StatFile + " " + strerror(errno));
 		}
+		return true;
+	} else {
+		return false;
+	}
+}
+
+void dequeueThread(const Config &config, NetStatQueue &queue) {
+	LOG_VERBOSE << "Starting dequeue thread";
+	try {
+		std::fstream file;
+		file.open(config.StatFile, std::ios_base::in);
+		if (file.good()) {
+			file.close();
+			throw std::runtime_error(config.StatFile + " already exist");
+		}
+		file.open(config.StatFile, std::ios_base::out);
+		if (file.fail()) {
+			throw std::runtime_error(config.StatFile + " " + strerror(errno));
+		}
+		file << "Timestamp\tConId\tProto\tType\tStatus\tElapsed(us)\tSize\n";
+
+		while (running.load()) {
+			dequeueStat(config, file, queue);
+		}
+		while (dequeueStat(config, file, queue)) {
+		}
+		end = TIME_NOW;
+		file.close();
 	} catch (std::exception &e) {
 		running.store(false);
-		// log fatal error
-		LOG_ERROR << "dequeue thread : " << e.what();
+		// fatal error
+		LOG_FATAL << "dequeue thread: " << e.what();
 	}
-	wb.wait();
-	LOG_VERBOSE << "Shutdown dequeue thread " << data.Id;
+	LOG_VERBOSE << "Shutdown dequeue thread";
 }
 
 void runClients(const Config &config) {
@@ -59,11 +90,18 @@ void runClients(const Config &config) {
 	NetStatQueue queue;
 
 	Thread *threads = new Thread[threadsCount];
-	int     last = 0;
+	boost::thread thread_q;
+	int last = 0;
 
 	running.store(true);
-	barrier wb(threadsCount + 2);
 
+	thread_q = thread(dequeueThread, std::ref(config), std::ref(queue));
+
+	boost::this_thread::sleep(boost::posix_time::milliseconds(50));
+	if (!running.load())
+		return;
+
+	barrier wb(threadsCount + 1);
 	for (int i = 0; i < config.Workers; i++) {
 		threads[last].data.Id = i;
 		threads[last].t =
@@ -79,6 +117,7 @@ void runClients(const Config &config) {
 		last++;
 	}
 
+	start = TIME_NOW;
 	wb.wait(); // wait for start
 	for (int i = 0; running.load() && i < config.Duration; i++) {
 		sleep(1);
@@ -91,5 +130,17 @@ void runClients(const Config &config) {
 	for (int i = 0; i < last; i++) {
 		threads[i].t.join();
 	}
+	thread_q.join();
 	delete[] threads;
+	using float_seconds = std::chrono::duration<double>;
+	auto duration =
+	    std::chrono::duration_cast<float_seconds>(end - start).count();
+	if (duration > 0) {
+		std::cout << std::fixed;
+		std::cout << "Test duration " << duration << " s" << std::endl;
+		for (auto &it : stat_count) {
+			std::cout << it.first << ": " << it.second << " ("
+			          << it.second / duration << " op/s)" << std::endl;
+		}
+	}
 }
