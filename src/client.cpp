@@ -26,7 +26,7 @@ using boost::asio::ip::tcp;
 using boost::asio::ip::udp;
 using std::string;
 
-void clientTCPThread(const Config &config, ClientData &data, barrier &wb) {
+void clientTCPThread(const Config &config, ClientData &data, barrier &wb, NetStatQueue &queue) {
 	wb.wait();
 	LOG_VERBOSE << "Starting TCP thread " << data.Id;
 	try {
@@ -41,6 +41,7 @@ void clientTCPThread(const Config &config, ClientData &data, barrier &wb) {
 		// string metricString = config.MetricPrefix + "." +
 		// std::to_string(data.Id);
 		//
+		NetStat stat;
 		while (running.load()) {
 			fmt::memory_buffer out;
 			format_to(out, "{:s} {:d} {:d}\n", metricPrefix, 1, 12);
@@ -57,11 +58,12 @@ void clientTCPThread(const Config &config, ClientData &data, barrier &wb) {
 					          << ec.message();
 				}
 				socket.close(ec);
-				if (ec) {
-					LOG_ERROR << "TCP thread socket close " << data.Id << " "
-					          << ec.message();
-				}
+				//if (ec) {
+					//LOG_ERROR << "TCP thread socket close " << data.Id << " "
+							  //<< ec.message();
+				//}
 			}
+			queue.enqueue(stat);
 		}
 	} catch (std::exception &e) {
 		// log fatal error
@@ -71,7 +73,7 @@ void clientTCPThread(const Config &config, ClientData &data, barrier &wb) {
 	LOG_VERBOSE << "Shutdown TCP thread " << data.Id;
 }
 
-void clientUDPThread(const Config &config, ClientData &data, barrier &wb) {
+void clientUDPThread(const Config &config, ClientData &data, barrier &wb, NetStatQueue &queue) {
 	wb.wait();
 	LOG_VERBOSE << "Starting UDP thread " << data.Id;
 	try {
@@ -83,6 +85,8 @@ void clientUDPThread(const Config &config, ClientData &data, barrier &wb) {
 
 		string metricPrefix =
 		    fmt::format("{:s}.{:d}", config.MetricPrefix, data.Id);
+
+		NetStat stat;
 		while (running.load()) {
 			fmt::memory_buffer out;
 			format_to(out, "{:s} {:d} {:d}\n", metricPrefix, 1, 12);
@@ -95,17 +99,16 @@ void clientUDPThread(const Config &config, ClientData &data, barrier &wb) {
 			} else {
 				socket.send_to(buf, endpoint, 0, ec);
 				if (ec) {
-					// An error occurred.
 					LOG_ERROR << "UDP thread socket write" << data.Id << ": "
 					          << ec.message();
 				}
 				socket.close(ec);
-				if (ec) {
-					// An error occurred.
-					LOG_ERROR << "UDP thread socket close" << data.Id << ": "
-					          << ec.message();
-				}
+				//if (ec) {
+					//LOG_ERROR << "UDP thread socket close" << data.Id << ": "
+							  //<< ec.message();
+				//}
 			}
+			queue.enqueue(stat);
 		}
 	} catch (std::exception &e) {
 		// log fatal error

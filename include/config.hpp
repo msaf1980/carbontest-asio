@@ -32,10 +32,7 @@ struct Config {
 
 	plog::Severity LogLevel;
 
-	// Verbose      bool
-
-	// StatFile string // write connections stat to file
-	// CPUProf  string // write cpu profile info to file
+	std::string StatFile; // write connections stat to file
 };
 
 void parseArgs(Config &config, int argc, char *argv[]);

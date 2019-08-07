@@ -38,6 +38,8 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 	                      cxxopts::value<int>()->default_value("100"))
 		("s,send_timeout", "Send timeout (in milliseconds)",
 	                      cxxopts::value<int>()->default_value("500"))
+		("f,file", "Write statistic to file",
+	                      cxxopts::value<int>()->default_value("test.csv"))
 	;
 	// clang-format on
 
@@ -103,6 +105,9 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 		config.LogLevel = plog::severityFromString(logLevel.c_str());
 		if (config.LogLevel == plog::Severity::none)
 			throw std::invalid_argument(arg);
+
+		arg = "file";
+		config.StatFile = result[arg].as<string>();
 
 	} catch (std::bad_cast &e) {
 		throw std::runtime_error("parameter '" + arg + "' has incorrect type");
