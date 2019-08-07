@@ -122,8 +122,8 @@ void runClients(const Config &config) {
 		last++;
 	}
 
-	start = TIME_NOW;
 	wb.wait(); // wait for start
+	start = TIME_NOW;
 	for (int i = 0; running.load() && i < config.Duration * 10; i++) {
 		boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	}
