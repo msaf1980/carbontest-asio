@@ -6,7 +6,7 @@
 
 #include <chrono>
 
-#include <blockingconcurrentqueue.h>
+#include <concurrentqueue.h>
 
 enum NetOper { CONNECT, SEND, RECV }; // update NetiOperStr after change this
 extern const char * NetOperStr[];
@@ -41,7 +41,7 @@ struct QueuePapam : moodycamel::ConcurrentQueueDefaultTraits {
 	static const size_t MAX_SUBQUEUE_SIZE = 10000000;
 };
 
-typedef moodycamel::BlockingConcurrentQueue<NetStat, QueuePapam> NetStatQueue;
+typedef moodycamel::ConcurrentQueue<NetStat, QueuePapam> NetStatQueue;
 
 typedef std::chrono::time_point<std::chrono::high_resolution_clock> chrono_clock;
 

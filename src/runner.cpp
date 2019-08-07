@@ -26,10 +26,10 @@ using std::string;
 chrono_clock start, end;
 std::map<string, uint64_t> stat_count;
 
-bool dequeueStat(const Config &config, std::fstream &file,
+void dequeueStat(const Config &config, std::fstream &file,
                  NetStatQueue &queue) {
 	NetStat stat;
-	if (queue.wait_dequeue_timed(stat, std::chrono::milliseconds(100))) {
+	while (queue.try_dequeue(stat)) {
 		string name = fmt::format("{}.{}.{}", NetProtoStr[stat.Proto],
 		                          NetOperStr[stat.Type], NetErrStr[stat.Error]);
 		stat_count[name]++;
@@ -42,13 +42,10 @@ bool dequeueStat(const Config &config, std::fstream &file,
 		if (file.fail()) {
 			throw std::runtime_error(config.StatFile + " " + strerror(errno));
 		}
-		return true;
-	} else {
-		return false;
 	}
 }
 
-void dequeueThread(const Config &config, NetStatQueue &queue) {
+void dequeueThread(const Config &config, barrier &wb, NetStatQueue &queue) {
 	LOG_VERBOSE << "Starting dequeue thread";
 	try {
 		std::fstream file;
@@ -62,13 +59,21 @@ void dequeueThread(const Config &config, NetStatQueue &queue) {
 			throw std::runtime_error(config.StatFile + " " + strerror(errno));
 		}
 		file << "Timestamp\tConId\tProto\tType\tStatus\tElapsed(us)\tSize\n";
+		if (file.fail()) {
+			throw std::runtime_error(config.StatFile + " " + strerror(errno));
+		}
+		wb.wait();
 
 		while (running.load()) {
 			dequeueStat(config, file, queue);
+			boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 		}
-		while (dequeueStat(config, file, queue)) {
-		}
+
+		wb.wait();
+
 		end = TIME_NOW;
+		dequeueStat(config, file, queue);
+
 		file.close();
 	} catch (std::exception &e) {
 		running.store(false);
@@ -94,14 +99,14 @@ void runClients(const Config &config) {
 	int last = 0;
 
 	running.store(true);
+	barrier wb(threadsCount + 2);
 
-	thread_q = thread(dequeueThread, std::ref(config), std::ref(queue));
+	thread_q = thread(dequeueThread, std::ref(config), std::ref(wb), std::ref(queue));
 
-	boost::this_thread::sleep(boost::posix_time::milliseconds(50));
+	boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	if (!running.load())
 		return;
 
-	barrier wb(threadsCount + 1);
 	for (int i = 0; i < config.Workers; i++) {
 		threads[last].data.Id = i;
 		threads[last].t =
@@ -119,8 +124,8 @@ void runClients(const Config &config) {
 
 	start = TIME_NOW;
 	wb.wait(); // wait for start
-	for (int i = 0; running.load() && i < config.Duration; i++) {
-		sleep(1);
+	for (int i = 0; running.load() && i < config.Duration * 10; i++) {
+		boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	}
 
 	LOG_INFO << "Shutting down";
