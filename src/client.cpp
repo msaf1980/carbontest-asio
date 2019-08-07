@@ -7,6 +7,8 @@
 //#include <thread>
 #include <chrono>
 
+#include <cstring>
+
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/basic_resolver_query.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -100,7 +102,7 @@ void clientTCPThread(const Config &config, ClientData &data, barrier &wb,
 			fmt::memory_buffer out;
 			format_to(out, "{:s} {:d} {:d}\n", metricPrefix, 1, 12);
 			mutable_buffer buf(out.data(), out.size());
-
+			
 			set_recv_timeout(socket.native_handle(), &con_timeout);
 			set_send_timeout(socket.native_handle(), &con_timeout);
 			auto start = TIME_NOW;
