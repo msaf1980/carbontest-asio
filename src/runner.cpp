@@ -126,7 +126,7 @@ void runClients(const Config &config) {
 		last++;
 	}
 
-	io_svc.run();
+	thread t_svc([&io_svc](){ io_svc.run(); });
 
 	wb.wait(); // wait for start
 	start = TIME_NOW;
@@ -142,6 +142,7 @@ void runClients(const Config &config) {
 	for (int i = 0; i < last; i++) {
 		clients[i].fb.join();
 	}
+	t_svc.join();
 	thread_q.join();
 	delete[] clients;
 	using float_seconds = std::chrono::duration<double>;
