@@ -73,7 +73,7 @@ endif()
 
 include(${CMAKE_SOURCE_DIR}/conan.cmake)
 conan_cmake_run(CONANFILE conanfile.txt
-                BASIC_SETUP NO_OUTPUT_DIRS)
+                BASIC_SETUP NO_OUTPUT_DIRS BUILD missing)
 endif()
 ################################################################################
 
