@@ -89,12 +89,12 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 
 		arg = "con_timeout";
 		config.ConTimeout = result[arg].as<int>();
-		if (config.ConTimeout < 1)
+		if (config.ConTimeout < 50)
 			throw std::invalid_argument(arg);
 
 		arg = "timeout";
 		config.Timeout = result[arg].as<int>();
-		if (config.Timeout < 1)
+		if (config.Timeout < 50)
 			throw std::invalid_argument(arg);
 
 		arg = "loglevel";

@@ -7,7 +7,7 @@
 #include <boost/bind.hpp>
 #include <boost/fiber/barrier.hpp>
 
-using boost::asio::steady_timer;
+using boost::asio::deadline_timer;
 using boost::asio::ip::tcp;
 using boost::asio::ip::udp;
 using boost::fibers::barrier;
@@ -26,17 +26,17 @@ class Client {
 	NetProto getProto();
 
   protected:
-	NetProto proto_; // protocol (also used as class ID)
-	NetStat stat_; // connection stat
+	NetProto     proto_; // protocol (also used as class ID)
+	NetStat      stat_;  // connection stat
 	chrono_clock start_; // start of last operation
 };
 
-class ClientTCP : public Client {
+class ClientTCP : public Client, std::enable_shared_from_this<ClientTCP> {
   public:
 	ClientTCP(boost::asio::io_context &io_context, const Config &config,
 	          size_t id, barrier &wb, NetStatQueue &queue)
-	    : config_(config), socket_(io_context), wb_(&wb),
-	      queue_(&queue), deadline_(io_context) {
+	    : config_(config), io_context_(&io_context), socket_(io_context),
+	      wb_(&wb), queue_(&queue), deadline_(io_context) {
 		stat_.Proto = NetProto::TCP;
 		stat_.Id = id;
 	}
@@ -51,13 +51,14 @@ class ClientTCP : public Client {
 	void do_write();
 	void handle_write(const boost::system::error_code &ec, std::size_t length);
 
-	bool stopped_ = false;
-	const Config config_;
-	tcp::socket socket_;
-	barrier *wb_;
-	NetStatQueue *queue_;
-	steady_timer deadline_;
-	char buf_[MAX_MESSAGE_LEN];
+	bool                     stopped_ = false;
+	const Config             config_;
+	boost::asio::io_context *io_context_;
+	tcp::socket              socket_;
+	barrier *                wb_;
+	NetStatQueue *           queue_;
+	deadline_timer           deadline_;
+	char                     buf_[MAX_MESSAGE_LEN];
 };
 
 void clientTCPThread(const Config &config, ClientData &data, barrier &wb,

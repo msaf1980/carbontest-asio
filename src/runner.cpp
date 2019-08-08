@@ -27,7 +27,7 @@ using std::map;
 using std::string;
 using std::vector;
 
-chrono_clock start, end;
+chrono_clock          start, end;
 map<string, uint64_t> stat_count;
 
 void dequeueStat(const Config &config, std::fstream &file,
@@ -66,7 +66,6 @@ void dequeueThread(const Config &config, barrier &wb, NetStatQueue &queue) {
 		if (file.fail()) {
 			throw std::runtime_error(config.StatFile + " " + strerror(errno));
 		}
-		wb.wait();
 
 		while (running.load()) {
 			dequeueStat(config, file, queue);
@@ -92,8 +91,9 @@ void runClients(const Config &config) {
 	NetStatQueue queue;
 
 	boost::asio::io_context io_context;
+	boost::asio::io_service::work work(io_context);
 
-	int clientsCount = 0;
+	int              clientsCount = 0;
 	vector<Client *> clients;
 
 	if (config.Workers > 0) {
@@ -103,7 +103,7 @@ void runClients(const Config &config) {
 	clients.reserve(clientsCount);
 
 	boost::thread thread_q;
-	int last = 0;
+	int           last = 0;
 
 	running.store(true);
 	barrier wb(2);
@@ -129,9 +129,17 @@ void runClients(const Config &config) {
 	// last++;
 	//}
 
-	boost::thread thread_ioc([&io_context]() { io_context.run(); });
+	size_t thread_count = boost::thread::hardware_concurrency();
+	if (thread_count > 2)
+		thread_count--;
+	LOG_INFO << "Thread count " << thread_count;
 
-	wb.wait();
+	boost::thread_group threads_ioc;
+	for (size_t i = 0; i < thread_count; ++i) {
+		threads_ioc.create_thread(boost::bind(&boost::asio::io_context::run, &io_context));
+	}
+
+	//boost::thread thread_ioc([&io_context]() { io_context.run(); });
 
 	start = TIME_NOW;
 	for (int i = 0; running.load() && i < config.Duration * 10; i++) {
@@ -159,7 +167,9 @@ void runClients(const Config &config) {
 	end = TIME_NOW;
 
 	thread_q.join();
-	thread_ioc.join();
+	//thread_ioc.join();
+	io_context.stop();
+	threads_ioc.join_all();
 	using float_seconds = std::chrono::duration<double>;
 	auto duration =
 	    std::chrono::duration_cast<float_seconds>(end - start).count();
