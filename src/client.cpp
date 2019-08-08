@@ -9,13 +9,7 @@
 
 #include <cstring>
 
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/ip/basic_resolver_query.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/ip/udp.hpp>
-#include <boost/asio/use_future.hpp>
-
-#include <boost/asio/buffer.hpp>
+#include <boost/asio.hpp>
 
 #include <concurrentqueue.h>
 
@@ -60,19 +54,121 @@ void NetStatSet(NetStat &stat, const boost::system::error_code &ec,
 	        .count();
 }
 
-void set_timeout_ms(struct timeval *tv, int ms) {
-	tv->tv_sec = ms / 1000;
-	tv->tv_usec = ms % 1000 * 1000;
+NetProto Client ::getProto() { return stat_.Proto; }
+
+void ClientTCP::start() {
+	start_connect();
+
+	// Start the deadline actor. You will note that we're not setting any
+	// particular deadline here. Instead, the connect and input actors will
+	// update the deadline prior to each asynchronous operation.
+	// deadline_.async_wait(boost::bind(&ClientTCP::check_deadline, this));
 }
 
-int set_recv_timeout(int sock_fd, struct timeval *tv) {
-	return setsockopt(sock_fd, SOL_SOCKET, SO_RCVTIMEO, &tv,
-	                  sizeof(struct timeval));
+void ClientTCP::stop() {
+	boost::system::error_code ec;
+	stopped_ = true;
+	socket_.close(ec);
+	// deadline_.cancel();
 }
 
-int set_send_timeout(int sock_fd, struct timeval *tv) {
-	return setsockopt(sock_fd, SOL_SOCKET, SO_SNDTIMEO, tv,
-	                  sizeof(struct timeval));
+void ClientTCP::check_deadline() {
+	if (stopped_)
+		return;
+
+	// Check whether the deadline has passed. We compare the deadline against
+	// the current time since a new asynchronous operation may have moved the
+	// deadline before this actor had a chance to run.
+	if (deadline_.expiry() <= steady_timer::clock_type::now()) {
+		// The deadline has passed. The socket is closed so that any outstanding
+		// asynchronous operations are cancelled.
+		socket_.close();
+
+		// There is no longer an active deadline. The expiry is set to the
+		// maximum time point so that the actor takes no action until a new
+		// deadline is set.
+		deadline_.expires_at(steady_timer::time_point::max());
+	}
+
+	// Put the actor back to sleep.
+	deadline_.async_wait(boost::bind(&ClientTCP::check_deadline, this));
+}
+
+void ClientTCP::do_reconnect() {
+	if (socket_.is_open()) {
+		boost::system::error_code ec;
+		socket_.close(ec);
+	}
+	start_connect();
+}
+
+void ClientTCP::start_connect() {
+	if (stopped_)
+		return;
+
+	LOG_DEBUG << "Starting TCP session " << stat_.Id;
+	stat_.Type = NetOper::CONNECT;
+	start_ = TIME_NOW;
+
+	tcp::endpoint endpoint(boost::asio::ip::address::from_string(config_.Host),
+	                       config_.Port);
+	// Set a deadline for the connect operation.
+	// deadline_.expires_after(std::chrono::milliseconds(config_->ConTimeout));
+
+	// Start the asynchronous connect operation.
+	socket_.async_connect(endpoint, [this](boost::system::error_code ec) {
+		auto end = TIME_NOW;
+		NetStatSet(stat_, ec, start_, end);
+		stat_.Size = 0;
+		if (!socket_.is_open()) {
+			// If the socket is closed at this time then
+			// the timeout handler must have run first.
+			stat_.Error = NetErr::TIMEOUT;
+			queue_->enqueue(stat_);
+			start_connect();
+		} else {
+			NetStatSet(stat_, ec, start_, end);
+			queue_->enqueue(stat_);
+			if (ec) {
+				do_reconnect();
+			} else {
+				do_write();
+			}
+		}
+	});
+}
+
+void ClientTCP::do_write() {
+	if (stopped_)
+		return;
+
+	LOG_DEBUG << "Write TCP session " << stat_.Id;
+	stat_.Type = NetOper::SEND;
+	start_ = TIME_NOW;
+
+	fmt::memory_buffer out;
+	format_to(out, "{:s}.{:d} {:d} {:d}\n", config_.MetricPrefix, stat_.Id, 1,
+	          12);
+
+	boost::asio::async_write(
+	    socket_, boost::asio::buffer(out.data(), out.size()),
+	    boost::bind(&ClientTCP::handle_write, this, _1, _2));
+}
+
+void ClientTCP::handle_write(const boost::system::error_code &ec,
+                             std::size_t length) {
+	auto end = TIME_NOW;
+	NetStatSet(stat_, ec, start_, end);
+	if (ec) {
+		stat_.Size = 0;
+		queue_->enqueue(stat_);
+		do_reconnect();
+	} else {
+		LOG_DEBUG << "Write TCP session " << stat_.Id << " done: " << length;
+		stat_.Size = length;
+		queue_->enqueue(stat_);
+		do_reconnect();
+	}
 }
 
 void clientTCPThread(const Config &config, ClientData &data, barrier &wb,
@@ -93,18 +189,11 @@ void clientTCPThread(const Config &config, ClientData &data, barrier &wb,
 		stat.Id = data.Id;
 		stat.Proto = NetProto::TCP;
 
-		struct timeval con_timeout;
-		set_timeout_ms(&con_timeout, config.ConTimeout);
-		struct timeval timeout;
-		set_timeout_ms(&timeout, config.Timeout);
-
 		while (running.load()) {
 			fmt::memory_buffer out;
 			format_to(out, "{:s} {:d} {:d}\n", metricPrefix, 1, 12);
 			mutable_buffer buf(out.data(), out.size());
-			
-			set_recv_timeout(socket.native_handle(), &con_timeout);
-			set_send_timeout(socket.native_handle(), &con_timeout);
+
 			auto start = TIME_NOW;
 			socket.connect(endpoint, ec);
 			auto end = TIME_NOW;
@@ -118,8 +207,6 @@ void clientTCPThread(const Config &config, ClientData &data, barrier &wb,
 					            << " connect: " << ec.message();
 				}
 			} else {
-				set_recv_timeout(socket.native_handle(), &timeout);
-				set_send_timeout(socket.native_handle(), &timeout);
 				auto start = TIME_NOW;
 				stat.Size = socket.write_some(buf, ec);
 				auto end = TIME_NOW;

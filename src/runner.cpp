@@ -2,6 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <vector>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -21,10 +22,13 @@ using boost::thread;
 using boost::asio::ip::tcp;
 using boost::asio::ip::udp;
 using boost::fibers::barrier;
+
+using std::map;
 using std::string;
+using std::vector;
 
 chrono_clock start, end;
-std::map<string, uint64_t> stat_count;
+map<string, uint64_t> stat_count;
 
 void dequeueStat(const Config &config, std::fstream &file,
                  NetStatQueue &queue) {
@@ -69,11 +73,6 @@ void dequeueThread(const Config &config, barrier &wb, NetStatQueue &queue) {
 			boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 		}
 
-		wb.wait();
-
-		end = TIME_NOW;
-		dequeueStat(config, file, queue);
-
 		file.close();
 	} catch (std::exception &e) {
 		running.store(false);
@@ -90,53 +89,77 @@ void runClients(const Config &config) {
 	LOG_INFO << "Starting with " << config.Workers << " TCP clients and "
 	         << config.UWorkers << " UDP clients";
 
-	int threadsCount = config.Workers + config.UWorkers;
-
 	NetStatQueue queue;
 
-	Thread *threads = new Thread[threadsCount];
+	boost::asio::io_context io_context;
+
+	int clientsCount = 0;
+	vector<Client *> clients;
+
+	if (config.Workers > 0) {
+		clientsCount += config.Workers;
+	}
+
+	clients.reserve(clientsCount);
+
 	boost::thread thread_q;
 	int last = 0;
 
 	running.store(true);
-	barrier wb(threadsCount + 2);
+	barrier wb(2);
 
-	thread_q = thread(dequeueThread, std::ref(config), std::ref(wb), std::ref(queue));
+	thread_q =
+	    thread(dequeueThread, std::ref(config), std::ref(wb), std::ref(queue));
 
 	boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	if (!running.load())
 		return;
 
 	for (int i = 0; i < config.Workers; i++) {
-		threads[last].data.Id = i;
-		threads[last].t =
-		    thread(clientTCPThread, std::ref(config),
-		           std::ref(threads[last].data), std::ref(wb), std::ref(queue));
+		ClientTCP *c = new ClientTCP(io_context, config, i, wb, queue);
+		clients.push_back(c);
+		c->start();
 		last++;
 	}
-	for (int i = 0; i < config.UWorkers; i++) {
-		threads[last].data.Id = i;
-		threads[last].t =
-		    thread(clientUDPThread, std::ref(config),
-		           std::ref(threads[last].data), std::ref(wb), std::ref(queue));
-		last++;
-	}
+	// for (int i = 0; i < config.UWorkers; i++) {
+	// threads[last].data.Id = i;
+	// threads[last].t =
+	// thread(clientUDPThread, std::ref(config),
+	// std::ref(threads[last].data), std::ref(wb), std::ref(queue));
+	// last++;
+	//}
 
-	wb.wait(); // wait for start
+	boost::thread thread_ioc([&io_context]() { io_context.run(); });
+
+	wb.wait();
+
 	start = TIME_NOW;
 	for (int i = 0; running.load() && i < config.Duration * 10; i++) {
 		boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	}
 
 	LOG_INFO << "Shutting down";
-	running.store(false);
-	wb.wait(); // wait for end
-
 	for (int i = 0; i < last; i++) {
-		threads[i].t.join();
+		Client *client = clients[i];
+		switch (client->getProto()) {
+		case NetProto::TCP: {
+			ClientTCP *c = static_cast<ClientTCP *>(client);
+			c->stop();
+			break;
+		}
+			// case NetProto::UDP:
+			// std::static_cast<ClientUDP*>(client)->close();
+			// break;
+		default:
+			LOG_ERROR << "unhandled close client type " << client->getProto();
+		}
 	}
+	running.store(false);
+
+	end = TIME_NOW;
+
 	thread_q.join();
-	delete[] threads;
+	thread_ioc.join();
 	using float_seconds = std::chrono::duration<double>;
 	auto duration =
 	    std::chrono::duration_cast<float_seconds>(end - start).count();
