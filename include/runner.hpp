@@ -1,14 +1,14 @@
 #ifndef _RUNNER_HPP_
 #define _RUNNER_HPP_
 
-#include <boost/thread.hpp>
+#include <boost/fiber/all.hpp>
 
 #include <client.hpp>
 #include <config.hpp>
 
-struct Thread {
-	struct ClientData data;
-	boost::thread       t;
+struct Client {
+	struct ClientData Data;
+	boost::fibers::fiber fb;
 };
 
 void runClients(const Config &config);

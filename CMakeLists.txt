@@ -15,6 +15,7 @@ option(TEST      "Build tests" ON)
 option(BENCH     "Build benchmarks" OFF)
 option(SANITIZE  "Adds sanitize flags" OFF)
 option(TSANITIZE  "Adds thread sanitize flags" OFF)
+option(CONAN     "Enable conan package manager" ON)
 #option(USE_COTIRE "Enable cutire build" ON)
 
 if(SANITIZE)
@@ -60,7 +61,22 @@ set ( BINARY ${PROJECT} )
 
 project( ${PROJECT} )
 
-# Include cmake script from cmake dir
+################################################################################
+if (CONAN)
+# Conan install
+# Download automatically, you can also just copy the conan.cmake file
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/conan.cmake")
+   message(STATUS "Downloading conan.cmake from https://github.com/conan-io/cmake-conan")
+   file(DOWNLOAD "https://github.com/conan-io/cmake-conan/raw/v0.14/conan.cmake"
+                 "${CMAKE_SOURCE_DIR}/conan.cmake")
+endif()
+
+include(${CMAKE_SOURCE_DIR}/conan.cmake)
+conan_cmake_run(CONANFILE conanfile.txt
+                BASIC_SETUP NO_OUTPUT_DIRS)
+endif()
+################################################################################
+
 file(GLOB cmakeFiles ${DIR_SCRIPT}/*.cmake)
 foreach(cmakeFile ${cmakeFiles})
     message("INCLUDE ${cmakeFile}")
@@ -72,7 +88,7 @@ set ( LIBRARIES
     boost_thread
     boost_fiber
     boost_context
-    fmt
+    ${CONAN_LIBS_FMT}
     pthread
 )
 

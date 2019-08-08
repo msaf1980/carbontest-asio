@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 
+#include <boost/asio/io_service.hpp>
 #include <boost/fiber/barrier.hpp>
 using boost::fibers::barrier;
 
@@ -13,7 +14,7 @@ struct ClientData {
 	size_t        Id;
 };
 
-void clientTCPThread(const Config &config, ClientData &data, barrier &wb, NetStatQueue &queue);
-void clientUDPThread(const Config &config, ClientData &data, barrier &wb, NetStatQueue &queue);
+void clientTCPSession(boost::asio::io_service &io_svc, const Config &config, ClientData &data, barrier &wb, NetStatQueue &queue);
+void clientUDPSession(boost::asio::io_service &io_svc, const Config &config, ClientData &data, barrier &wb, NetStatQueue &queue);
 
 #endif /* _CLIENT_HPP_ */

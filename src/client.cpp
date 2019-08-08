@@ -9,13 +9,7 @@
 
 #include <cstring>
 
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/ip/basic_resolver_query.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/ip/udp.hpp>
-#include <boost/asio/use_future.hpp>
-
-#include <boost/asio/buffer.hpp>
+#include <boost/asio.hpp>
 
 #include <concurrentqueue.h>
 
@@ -24,6 +18,8 @@
 #include <plog/Log.h>
 
 #include <client.hpp>
+
+#include <asio/yield.hpp>
 
 using boost::asio::mutable_buffer;
 using boost::asio::ip::tcp;
@@ -37,6 +33,8 @@ NetErr NetErrorFromEc(const boost::system::error_code &ec) {
 			return NetErr::REFUSED;
 		case boost::system::errc::connection_reset:
 			return NetErr::RESET;
+		case boost::asio::error::eof:
+			return NetErr::END;
 		case boost::system::errc::broken_pipe:
 			return NetErr::PIPE;
 		default:
@@ -75,16 +73,15 @@ int set_send_timeout(int sock_fd, struct timeval *tv) {
 	                  sizeof(struct timeval));
 }
 
-void clientTCPThread(const Config &config, ClientData &data, barrier &wb,
-                     NetStatQueue &queue) {
+void clientTCPSession(boost::asio::io_service &io_svc, const Config &config,
+                      ClientData &data, barrier &wb, NetStatQueue &queue) {
 	wb.wait();
-	LOG_VERBOSE << "Starting TCP thread " << data.Id;
+	LOG_DEBUG << "Starting TCP session " << data.Id;
 	try {
-		boost::asio::io_context io_context;
 		boost::system::error_code ec;
 		tcp::endpoint endpoint(
 		    boost::asio::ip::address::from_string(config.Host), config.Port);
-		tcp::socket socket(io_context);
+		tcp::socket socket(io_svc);
 
 		string metricPrefix =
 		    fmt::format("{:s}.{:d}", config.MetricPrefix, data.Id);
@@ -102,11 +99,12 @@ void clientTCPThread(const Config &config, ClientData &data, barrier &wb,
 			fmt::memory_buffer out;
 			format_to(out, "{:s} {:d} {:d}\n", metricPrefix, 1, 12);
 			mutable_buffer buf(out.data(), out.size());
-			
-			set_recv_timeout(socket.native_handle(), &con_timeout);
-			set_send_timeout(socket.native_handle(), &con_timeout);
+
+			// set_recv_timeout(socket.native_handle(), &con_timeout);
+			// set_send_timeout(socket.native_handle(), &con_timeout);
 			auto start = TIME_NOW;
-			socket.connect(endpoint, ec);
+			LOG_DEBUG << "TCP session " << data.Id << " connecting";
+			socket.async_connect(endpoint, boost::fibers::asio::yield[ec]);
 			auto end = TIME_NOW;
 			stat.Type = NetOper::CONNECT;
 			NetStatSet(stat, ec, start, end);
@@ -114,40 +112,44 @@ void clientTCPThread(const Config &config, ClientData &data, barrier &wb,
 			queue.enqueue(stat);
 			if (ec) {
 				if (stat.Error == NetErr::ERROR) {
-					LOG_VERBOSE << "TCP thread " << data.Id
+					LOG_VERBOSE << "TCP session " << data.Id
 					            << " connect: " << ec.message();
 				}
 			} else {
-				set_recv_timeout(socket.native_handle(), &timeout);
-				set_send_timeout(socket.native_handle(), &timeout);
+				// set_recv_timeout(socket.native_handle(), &timeout);
+				// set_send_timeout(socket.native_handle(), &timeout);
 				auto start = TIME_NOW;
-				stat.Size = socket.write_some(buf, ec);
+				LOG_DEBUG << "TCP session " << data.Id << " writing";
+				stat.Size = boost::asio::async_write(
+				    socket, buf, boost::fibers::asio::yield[ec]);
 				auto end = TIME_NOW;
 				stat.Type = NetOper::SEND;
 				NetStatSet(stat, ec, start, end);
 				if (ec) {
 					stat.Size = 0;
 					if (stat.Error == NetErr::ERROR) {
-						LOG_VERBOSE << "TCP thread " << data.Id
+						LOG_VERBOSE << "TCP session " << data.Id
 						            << " write: " << ec.message();
 					}
 				}
+				LOG_DEBUG << "TCP session " << data.Id << " queue";
 				queue.enqueue(stat);
+				LOG_DEBUG << "TCP session " << data.Id << " closing";
 				socket.close(ec);
 			}
 		}
 	} catch (std::exception &e) {
 		// log fatal error
-		LOG_ERROR << "TCP thread " << data.Id << ": " << e.what();
+		LOG_ERROR << "TCP session " << data.Id << ": " << e.what();
 	}
 	wb.wait();
-	LOG_VERBOSE << "Shutdown TCP thread " << data.Id;
+	LOG_VERBOSE << "Shutdown TCP session " << data.Id;
 }
 
-void clientUDPThread(const Config &config, ClientData &data, barrier &wb,
-                     NetStatQueue &queue) {
+void clientUDPSession(boost::asio::io_service &io_svc, const Config &config,
+                      ClientData &data, barrier &wb, NetStatQueue &queue) {
 	wb.wait();
-	LOG_VERBOSE << "Starting UDP thread " << data.Id;
+	LOG_DEBUG << "Starting UDP session " << data.Id;
 	try {
 		boost::asio::io_context io_context;
 		boost::system::error_code ec;
@@ -176,7 +178,7 @@ void clientUDPThread(const Config &config, ClientData &data, barrier &wb,
 			if (ec) {
 				// An error occurred.
 				if (stat.Error == NetErr::ERROR) {
-					LOG_ERROR << "UDP thread " << data.Id
+					LOG_ERROR << "UDP session " << data.Id
 					          << " connect: " << ec.message();
 				}
 			} else {
@@ -198,7 +200,7 @@ void clientUDPThread(const Config &config, ClientData &data, barrier &wb,
 		}
 	} catch (std::exception &e) {
 		// log fatal error
-		LOG_ERROR << "TCP thread " << data.Id << ": " << e.what();
+		LOG_ERROR << "UDP session " << data.Id << ": " << e.what();
 	}
 	wb.wait();
 	LOG_VERBOSE << "Shutdown UDP thread " << data.Id;

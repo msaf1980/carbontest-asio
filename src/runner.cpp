@@ -3,11 +3,12 @@
 #include <iostream>
 #include <map>
 
-#include <boost/asio/io_context.hpp>
+#include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/use_future.hpp>
-#include <boost/fiber/barrier.hpp>
+
+#include <boost/thread.hpp>
 
 #include <plog/Appenders/ConsoleAppender.h>
 #include <plog/Log.h>
@@ -21,9 +22,9 @@ using boost::thread;
 using boost::asio::ip::tcp;
 using boost::asio::ip::udp;
 using boost::fibers::barrier;
+
 using std::string;
 
-chrono_clock start, end;
 std::map<string, uint64_t> stat_count;
 
 void dequeueStat(const Config &config, std::fstream &file,
@@ -71,7 +72,6 @@ void dequeueThread(const Config &config, barrier &wb, NetStatQueue &queue) {
 
 		wb.wait();
 
-		end = TIME_NOW;
 		dequeueStat(config, file, queue);
 
 		file.close();
@@ -93,34 +93,40 @@ void runClients(const Config &config) {
 	int threadsCount = config.Workers + config.UWorkers;
 
 	NetStatQueue queue;
+	chrono_clock start, end;
 
-	Thread *threads = new Thread[threadsCount];
+	Client *clients = new Client[threadsCount];
+
+	boost::asio::io_service io_svc;
 	boost::thread thread_q;
 	int last = 0;
 
 	running.store(true);
 	barrier wb(threadsCount + 2);
 
-	thread_q = thread(dequeueThread, std::ref(config), std::ref(wb), std::ref(queue));
+	thread_q =
+	    thread(dequeueThread, std::ref(config), std::ref(wb), std::ref(queue));
 
 	boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	if (!running.load())
 		return;
 
 	for (int i = 0; i < config.Workers; i++) {
-		threads[last].data.Id = i;
-		threads[last].t =
-		    thread(clientTCPThread, std::ref(config),
-		           std::ref(threads[last].data), std::ref(wb), std::ref(queue));
+		clients[last].Data.Id = i;
+		clients[last].fb = boost::fibers::fiber(
+		    clientTCPSession, std::ref(io_svc), std::ref(config),
+		    std::ref(clients[last].Data), std::ref(wb), std::ref(queue));
 		last++;
 	}
 	for (int i = 0; i < config.UWorkers; i++) {
-		threads[last].data.Id = i;
-		threads[last].t =
-		    thread(clientUDPThread, std::ref(config),
-		           std::ref(threads[last].data), std::ref(wb), std::ref(queue));
+		clients[last].Data.Id = i;
+		clients[last].fb =
+		    boost::fibers::fiber(clientUDPSession, std::ref(io_svc), std::ref(config),
+		           std::ref(clients[last].Data), std::ref(wb), std::ref(queue));
 		last++;
 	}
+
+	io_svc.run();
 
 	wb.wait(); // wait for start
 	start = TIME_NOW;
@@ -131,12 +137,13 @@ void runClients(const Config &config) {
 	LOG_INFO << "Shutting down";
 	running.store(false);
 	wb.wait(); // wait for end
+	end = TIME_NOW;
 
 	for (int i = 0; i < last; i++) {
-		threads[i].t.join();
+		clients[i].fb.join();
 	}
 	thread_q.join();
-	delete[] threads;
+	delete[] clients;
 	using float_seconds = std::chrono::duration<double>;
 	auto duration =
 	    std::chrono::duration_cast<float_seconds>(end - start).count();
