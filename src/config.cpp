@@ -31,7 +31,7 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 		("d,duration", "Test duration (in seconds)",
 	                      cxxopts::value<int>()->default_value("10"))
 		("T,threads", "allocated threads", cxxopts::value<int>()->default_value("0"))
-		("w,workers", "TCP workers", cxxopts::value<int>()->default_value("0"))
+		("w,workers", "TCP workers", cxxopts::value<int>()->default_value("10"))
 		("u,uworkers", "UDP workers", cxxopts::value<int>()->default_value("0"))
 		("m,metrics", "Metrics, sended in one TCP connection",
 	                      cxxopts::value<int>()->default_value("1"))
@@ -68,6 +68,9 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 		config.UWorkers = result[arg].as<int>();
 		if (config.UWorkers < 0)
 			throw std::invalid_argument(arg);
+
+		if (config.Workers == 0 && config.UWorkers == 0)
+			throw std::invalid_argument("workers, uworkers");
 
 		arg = "duration";
 		config.Duration = result[arg].as<int>();
