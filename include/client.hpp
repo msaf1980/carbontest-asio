@@ -31,12 +31,12 @@ class Client {
 	chrono_clock start_; // start of last operation
 };
 
-class ClientTCP : public Client, std::enable_shared_from_this<ClientTCP> {
+class ClientTCP : public Client {
   public:
 	ClientTCP(boost::asio::io_context &io_context, const Config &config,
-	          size_t id, barrier &wb, NetStatQueue &queue)
+	          size_t id, NetStatQueue &queue)
 	    : config_(config), io_context_(&io_context), socket_(io_context),
-	      wb_(&wb), queue_(&queue), deadline_(io_context) {
+	      queue_(&queue), deadline_(io_context) {
 		stat_.Proto = NetProto::TCP;
 		stat_.Id = id;
 	}
@@ -55,14 +55,11 @@ class ClientTCP : public Client, std::enable_shared_from_this<ClientTCP> {
 	const Config             config_;
 	boost::asio::io_context *io_context_;
 	tcp::socket              socket_;
-	barrier *                wb_;
 	NetStatQueue *           queue_;
 	steady_timer             deadline_;
 	char                     buf_[MAX_MESSAGE_LEN];
 };
 
-void clientTCPThread(const Config &config, ClientData &data, barrier &wb,
-                     NetStatQueue &queue);
 void clientUDPThread(const Config &config, ClientData &data, barrier &wb,
                      NetStatQueue &queue);
 

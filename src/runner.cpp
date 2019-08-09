@@ -27,7 +27,7 @@ using std::map;
 using std::string;
 using std::vector;
 
-chrono_clock          start, end;
+chrono_clock start, end;
 map<string, uint64_t> stat_count;
 
 void dequeueStat(const Config &config, std::fstream &file,
@@ -93,17 +93,15 @@ void runClients(const Config &config) {
 	boost::asio::io_context io_context;
 	boost::asio::io_service::work work(io_context);
 
-	int              clientsCount = 0;
-	vector<Client *> clients;
+	int clientsCount = 0;
+	vector<ClientTCP> clientsTCP;
+	// vector<ClientUDP> clientsUDP;
 
 	if (config.Workers > 0) {
-		clientsCount += config.Workers;
+		clientsTCP.reserve(config.Workers);
 	}
 
-	clients.reserve(clientsCount);
-
 	boost::thread thread_q;
-	int           last = 0;
 
 	running.store(true);
 	barrier wb(2);
@@ -115,61 +113,39 @@ void runClients(const Config &config) {
 	if (!running.load())
 		return;
 
-	for (int i = 0; i < config.Workers; i++) {
-		ClientTCP *c = new ClientTCP(io_context, config, i, wb, queue);
-		clients.push_back(c);
-		c->start();
-		last++;
-	}
-	// for (int i = 0; i < config.UWorkers; i++) {
-	// threads[last].data.Id = i;
-	// threads[last].t =
-	// thread(clientUDPThread, std::ref(config),
-	// std::ref(threads[last].data), std::ref(wb), std::ref(queue));
-	// last++;
-	//}
-
 	int thread_count = config.Threads;
 	if (thread_count > 3)
 		thread_count--;
 	LOG_INFO << "Thread count " << thread_count;
 
-	boost::thread_group threads_ioc;
-	for (int i = 0; i < thread_count; ++i) {
-		threads_ioc.create_thread(boost::bind(&boost::asio::io_context::run, &io_context));
+	for (int i = 0; i < config.Workers; i++) {
+		ClientTCP c(io_context, config, i, queue);
+		clientsTCP.push_back(std::move(c));
+		clientsTCP[i].start();
 	}
 
-	//boost::thread thread_ioc([&io_context]() { io_context.run(); });
-
 	start = TIME_NOW;
+
+	boost::thread_group threads_ioc;
+	for (int i = 0; i < thread_count; ++i) {
+		threads_ioc.create_thread(
+		    boost::bind(&boost::asio::io_context::run, &io_context));
+	}
+
 	for (int i = 0; running.load() && i < config.Duration * 10; i++) {
 		boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	}
 
 	LOG_INFO << "Shutting down";
-	for (int i = 0; i < last; i++) {
-		Client *client = clients[i];
-		switch (client->getProto()) {
-		case NetProto::TCP: {
-			ClientTCP *c = static_cast<ClientTCP *>(client);
-			c->stop();
-			break;
-		}
-			// case NetProto::UDP:
-			// std::static_cast<ClientUDP*>(client)->close();
-			// break;
-		default:
-			LOG_ERROR << "unhandled close client type " << client->getProto();
-		}
-	}
-	running.store(false);
 
+	io_context.stop();
+
+	running.store(false);
 	end = TIME_NOW;
 
 	thread_q.join();
-	//thread_ioc.join();
-	io_context.stop();
 	threads_ioc.join_all();
+
 	using float_seconds = std::chrono::duration<double>;
 	auto duration =
 	    std::chrono::duration_cast<float_seconds>(end - start).count();
