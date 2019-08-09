@@ -73,15 +73,14 @@ int set_send_timeout(int sock_fd, struct timeval *tv) {
 	                  sizeof(struct timeval));
 }
 
-void clientTCPSession(boost::asio::io_service &io_svc, const Config &config,
-                      ClientData &data, barrier &wb, NetStatQueue &queue) {
-	wb.wait();
+void clientTCPSession(boost::asio::io_context &io_context, const Config &config,
+                      ClientData &data, NetStatQueue &queue) {
 	LOG_DEBUG << "Starting TCP session " << data.Id;
 	try {
 		boost::system::error_code ec;
 		tcp::endpoint endpoint(
 		    boost::asio::ip::address::from_string(config.Host), config.Port);
-		tcp::socket socket(io_svc);
+		tcp::socket socket(io_context);
 
 		string metricPrefix =
 		    fmt::format("{:s}.{:d}", config.MetricPrefix, data.Id);
@@ -90,10 +89,10 @@ void clientTCPSession(boost::asio::io_service &io_svc, const Config &config,
 		stat.Id = data.Id;
 		stat.Proto = NetProto::TCP;
 
-		struct timeval con_timeout;
-		set_timeout_ms(&con_timeout, config.ConTimeout);
-		struct timeval timeout;
-		set_timeout_ms(&timeout, config.Timeout);
+		//struct timeval con_timeout;
+		//set_timeout_ms(&con_timeout, config.ConTimeout);
+		//struct timeval timeout;
+		//set_timeout_ms(&timeout, config.Timeout);
 
 		while (running.load()) {
 			fmt::memory_buffer out;
@@ -142,13 +141,11 @@ void clientTCPSession(boost::asio::io_service &io_svc, const Config &config,
 		// log fatal error
 		LOG_ERROR << "TCP session " << data.Id << ": " << e.what();
 	}
-	wb.wait();
 	LOG_VERBOSE << "Shutdown TCP session " << data.Id;
 }
 
-void clientUDPSession(boost::asio::io_service &io_svc, const Config &config,
-                      ClientData &data, barrier &wb, NetStatQueue &queue) {
-	wb.wait();
+void clientUDPSession(boost::asio::io_context &io_context, const Config &config,
+                      ClientData &data, NetStatQueue &queue) {
 	LOG_DEBUG << "Starting UDP session " << data.Id;
 	try {
 		boost::asio::io_context io_context;
@@ -202,6 +199,5 @@ void clientUDPSession(boost::asio::io_service &io_svc, const Config &config,
 		// log fatal error
 		LOG_ERROR << "UDP session " << data.Id << ": " << e.what();
 	}
-	wb.wait();
 	LOG_VERBOSE << "Shutdown UDP thread " << data.Id;
 }

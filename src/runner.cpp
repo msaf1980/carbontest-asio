@@ -46,7 +46,7 @@ void dequeueStat(const Config &config, std::fstream &file,
 	}
 }
 
-void dequeueThread(const Config &config, barrier &wb, NetStatQueue &queue) {
+void dequeueThread(const Config &config, NetStatQueue &queue) {
 	LOG_VERBOSE << "Starting dequeue thread";
 	try {
 		std::fstream file;
@@ -63,14 +63,11 @@ void dequeueThread(const Config &config, barrier &wb, NetStatQueue &queue) {
 		if (file.fail()) {
 			throw std::runtime_error(config.StatFile + " " + strerror(errno));
 		}
-		wb.wait();
 
 		while (running.load()) {
 			dequeueStat(config, file, queue);
 			boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 		}
-
-		wb.wait();
 
 		dequeueStat(config, file, queue);
 
@@ -97,15 +94,14 @@ void runClients(const Config &config) {
 
 	Client *clients = new Client[threadsCount];
 
-	boost::asio::io_service io_svc;
+	boost::asio::io_context io_context;
 	boost::thread thread_q;
 	int last = 0;
 
 	running.store(true);
-	barrier wb(threadsCount + 2);
 
 	thread_q =
-	    thread(dequeueThread, std::ref(config), std::ref(wb), std::ref(queue));
+	    thread(dequeueThread, std::ref(config), std::ref(queue));
 
 	boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	if (!running.load())
@@ -114,37 +110,37 @@ void runClients(const Config &config) {
 	for (int i = 0; i < config.Workers; i++) {
 		clients[last].Data.Id = i;
 		clients[last].fb = boost::fibers::fiber(
-		    clientTCPSession, std::ref(io_svc), std::ref(config),
-		    std::ref(clients[last].Data), std::ref(wb), std::ref(queue));
+		    clientTCPSession, std::ref(io_context), std::ref(config),
+		    std::ref(clients[last].Data), std::ref(queue));
 		last++;
 	}
 	for (int i = 0; i < config.UWorkers; i++) {
 		clients[last].Data.Id = i;
 		clients[last].fb =
-		    boost::fibers::fiber(clientUDPSession, std::ref(io_svc), std::ref(config),
-		           std::ref(clients[last].Data), std::ref(wb), std::ref(queue));
+		    boost::fibers::fiber(clientUDPSession, std::ref(io_context), std::ref(config),
+		           std::ref(clients[last].Data), std::ref(queue));
 		last++;
 	}
 
-	thread t_svc([&io_svc](){ io_svc.run(); });
+	thread t_svc([&io_context](){ io_context.run(); });
 
-	wb.wait(); // wait for start
 	start = TIME_NOW;
 	for (int i = 0; running.load() && i < config.Duration * 10; i++) {
 		boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	}
 
 	LOG_INFO << "Shutting down";
+	io_context.stop();
 	running.store(false);
-	wb.wait(); // wait for end
+	thread_q.join();
 	end = TIME_NOW;
 
 	for (int i = 0; i < last; i++) {
 		clients[i].fb.join();
 	}
 	t_svc.join();
-	thread_q.join();
 	delete[] clients;
+
 	using float_seconds = std::chrono::duration<double>;
 	auto duration =
 	    std::chrono::duration_cast<float_seconds>(end - start).count();

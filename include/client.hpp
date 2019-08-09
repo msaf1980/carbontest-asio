@@ -14,7 +14,7 @@ struct ClientData {
 	size_t        Id;
 };
 
-void clientTCPSession(boost::asio::io_service &io_svc, const Config &config, ClientData &data, barrier &wb, NetStatQueue &queue);
-void clientUDPSession(boost::asio::io_service &io_svc, const Config &config, ClientData &data, barrier &wb, NetStatQueue &queue);
+void clientTCPSession(boost::asio::io_context &io_context, const Config &config, ClientData &data, NetStatQueue &queue);
+void clientUDPSession(boost::asio::io_context &io_context, const Config &config, ClientData &data, NetStatQueue &queue);
 
 #endif /* _CLIENT_HPP_ */
