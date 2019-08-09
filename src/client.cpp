@@ -47,7 +47,7 @@ NetErr NetErrorFromEc(const boost::system::error_code &ec) {
 	}
 }
 
-void NetStatSet(NetStat &stat, const boost::system::error_code &ec,
+void NetStatSet(NetStat &stat, boost::system::error_code ec,
                 const chrono_clock &start, const chrono_clock &end) {
 	stat.Error = NetErrorFromEc(ec);
 	stat.TimeStamp = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -70,12 +70,13 @@ void ClientTCP::start() {
 void ClientTCP::stop() {
 	boost::system::error_code ec;
 	stopped_ = true;
-	boost::asio::post(*io_context_, [this]() {
-		if (socket_.is_open()) {
-			boost::system::error_code ec;
-			socket_.close(ec);
-		}
-	});
+	// boost::asio::post(*io_context_, [this]() {
+	if (socket_.is_open()) {
+		//socket_.cancel();
+		boost::system::error_code ec;
+		socket_.close(ec);
+	}
+	//});
 	deadline_.cancel();
 }
 
@@ -180,7 +181,7 @@ void ClientTCP::do_write() {
 }
 
 void ClientTCP::handle_write(const boost::system::error_code &ec,
-                             std::size_t                      length) {
+                             std::size_t length) {
 	auto end = TIME_NOW;
 	NetStatSet(stat_, ec, start_, end);
 	if (!socket_.is_open()) {
@@ -213,10 +214,10 @@ void clientUDPThread(const Config &config, ClientData &data, barrier &wb,
 	wb.wait();
 	LOG_VERBOSE << "Starting UDP thread " << data.Id;
 	try {
-		boost::asio::io_context   io_context;
+		boost::asio::io_context io_context;
 		boost::system::error_code ec;
-		udp::endpoint             endpoint(
-            boost::asio::ip::address::from_string(config.Host), config.Port);
+		udp::endpoint endpoint(
+		    boost::asio::ip::address::from_string(config.Host), config.Port);
 		udp::socket socket(io_context);
 
 		string metricPrefix =
@@ -230,7 +231,7 @@ void clientUDPThread(const Config &config, ClientData &data, barrier &wb,
 			fmt::memory_buffer out;
 			format_to(out, "{:s} {:d} {:d}\n", metricPrefix, 1, 12);
 			mutable_buffer buf(out.data(), out.size());
-			auto           start = TIME_NOW;
+			auto start = TIME_NOW;
 			socket.open(udp::v4(), ec);
 			auto end = TIME_NOW;
 			stat.Type = NetOper::CONNECT;
