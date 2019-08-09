@@ -2,6 +2,8 @@
 #include <stdexcept>
 #include <string>
 
+#include <boost/thread.hpp>
+
 #include <cxxopts.hpp>
 
 #include <config.hpp>
@@ -28,7 +30,8 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 	                      cxxopts::value<string>()->default_value("test"))
 		("d,duration", "Test duration (in seconds)",
 	                      cxxopts::value<int>()->default_value("10"))
-		("w,workers", "TCP workers", cxxopts::value<int>()->default_value("10"))
+		("T,threads", "allocated threads", cxxopts::value<int>()->default_value("0"))
+		("w,workers", "TCP workers", cxxopts::value<int>()->default_value("0"))
 		("u,uworkers", "UDP workers", cxxopts::value<int>()->default_value("0"))
 		("m,metrics", "Metrics, sended in one TCP connection",
 	                      cxxopts::value<int>()->default_value("1"))
@@ -51,6 +54,11 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 
 	string arg;
 	try {
+		arg = "threads";
+		config.Threads = result[arg].as<int>();
+		if (config.Threads < 2)
+			config.Threads = boost::thread::hardware_concurrency();
+		 
 		arg = "workers";
 		config.Workers = result[arg].as<int>();
 		if (config.Workers < 0)

@@ -7,7 +7,7 @@
 #include <boost/bind.hpp>
 #include <boost/fiber/barrier.hpp>
 
-using boost::asio::deadline_timer;
+using boost::asio::steady_timer;
 using boost::asio::ip::tcp;
 using boost::asio::ip::udp;
 using boost::fibers::barrier;
@@ -57,7 +57,7 @@ class ClientTCP : public Client, std::enable_shared_from_this<ClientTCP> {
 	tcp::socket              socket_;
 	barrier *                wb_;
 	NetStatQueue *           queue_;
-	deadline_timer           deadline_;
+	steady_timer             deadline_;
 	char                     buf_[MAX_MESSAGE_LEN];
 };
 

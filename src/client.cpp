@@ -34,6 +34,8 @@ NetErr NetErrorFromEc(const boost::system::error_code &ec) {
 		case boost::system::errc::broken_pipe:
 			return NetErr::PIPE;
 		case boost::asio::error::timed_out:
+		case boost::asio::error::operation_aborted:
+		case boost::asio::error::connection_aborted:
 			return NetErr::TIMEOUT;
 		default:
 			return NetErr::ERROR;
@@ -84,7 +86,7 @@ void ClientTCP::check_deadline() {
 	// Check whether the deadline has passed. We compare the deadline against
 	// the current time since a new asynchronous operation may have moved the
 	// deadline before this actor had a chance to run.
-	if (deadline_.expires_at() <= deadline_timer::traits_type::now()) {
+	if (deadline_.expiry() <= steady_timer::clock_type::now()) {
 		// The deadline has passed. The socket is closed so that any outstanding
 		// asynchronous operations are cancelled.
 		if (socket_.is_open()) {
@@ -94,7 +96,7 @@ void ClientTCP::check_deadline() {
 		// There is no longer an active deadline. The expiry is set to the
 		// maximum time point so that the actor takes no action until a new
 		// deadline is set.
-		deadline_.expires_at(boost::posix_time::pos_infin);
+		deadline_.expires_at(steady_timer::time_point::max());
 	}
 
 	// Put the actor back to sleep.
@@ -104,6 +106,7 @@ void ClientTCP::check_deadline() {
 void ClientTCP::do_reconnect() {
 	if (stopped_)
 		return;
+	deadline_.cancel();
 	if (socket_.is_open()) {
 		boost::system::error_code ec;
 		socket_.close(ec);
@@ -115,7 +118,7 @@ void ClientTCP::start_connect() {
 	if (stopped_)
 		return;
 
-	LOG_DEBUG << "Starting TCP session " << stat_.Id;
+	LOG_VERBOSE << "Starting TCP session " << stat_.Id;
 	stat_.Type = NetOper::CONNECT;
 	start_ = TIME_NOW;
 
@@ -124,10 +127,12 @@ void ClientTCP::start_connect() {
 	// Set a deadline for the connect operation.
 	// deadline_.expires_after(std::chrono::milliseconds(config_->ConTimeout));
 
-	deadline_.expires_from_now(boost::posix_time::millisec(config_.ConTimeout));
+	deadline_.expires_after(
+	    boost::asio::chrono::milliseconds(config_.ConTimeout));
 	// Start the asynchronous connect operation.
 	socket_.async_connect(endpoint, [this](boost::system::error_code ec) {
 		auto end = TIME_NOW;
+		deadline_.cancel();
 		NetStatSet(stat_, ec, start_, end);
 		stat_.Size = 0;
 		if (!socket_.is_open()) {
@@ -140,7 +145,10 @@ void ClientTCP::start_connect() {
 			NetStatSet(stat_, ec, start_, end);
 			queue_->enqueue(stat_);
 			if (ec) {
-				LOG_VERBOSE << "Connect TCP session " << stat_.Id << ": " << ec.message();
+				if (stat_.Error == NetErr::ERROR) {
+					LOG_WARNING << "Connect TCP session " << stat_.Id
+					            << " error unknown: " << ec.message();
+				}
 				do_reconnect();
 			} else {
 				do_write();
@@ -153,7 +161,7 @@ void ClientTCP::do_write() {
 	if (stopped_)
 		return;
 
-	LOG_DEBUG << "Write TCP session " << stat_.Id;
+	LOG_VERBOSE << "Write TCP session " << stat_.Id;
 	stat_.Type = NetOper::SEND;
 	start_ = TIME_NOW;
 
@@ -165,7 +173,7 @@ void ClientTCP::do_write() {
 	format_to(out, "{:s}.{:d} {:d} {:d}\n", config_.MetricPrefix, stat_.Id,
 	          timeStamp % 60 + stat_.Id, timeStamp);
 
-	deadline_.expires_from_now(boost::posix_time::millisec(config_.Timeout));
+	deadline_.expires_after(boost::asio::chrono::milliseconds(config_.Timeout));
 	boost::asio::async_write(
 	    socket_, boost::asio::buffer(out.data(), out.size()),
 	    boost::bind(&ClientTCP::handle_write, this, _1, _2));
@@ -183,13 +191,16 @@ void ClientTCP::handle_write(const boost::system::error_code &ec,
 		start_connect();
 	} else {
 		if (ec) {
-			LOG_VERBOSE << "Write TCP session " << stat_.Id << ": " << ec.message();
+			if (stat_.Error == NetErr::ERROR) {
+				LOG_WARNING << "Write TCP session " << stat_.Id
+				            << " error unknown: " << ec.message();
+			}
 			stat_.Size = 0;
 			queue_->enqueue(stat_);
 			do_reconnect();
 		} else {
-			LOG_DEBUG << "Write TCP session " << stat_.Id
-			          << " done: " << length;
+			LOG_VERBOSE << "Write TCP session " << stat_.Id
+			            << " done: " << length;
 			stat_.Size = length;
 			queue_->enqueue(stat_);
 			do_reconnect();

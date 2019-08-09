@@ -129,13 +129,13 @@ void runClients(const Config &config) {
 	// last++;
 	//}
 
-	size_t thread_count = boost::thread::hardware_concurrency();
-	if (thread_count > 2)
+	int thread_count = config.Threads;
+	if (thread_count > 3)
 		thread_count--;
 	LOG_INFO << "Thread count " << thread_count;
 
 	boost::thread_group threads_ioc;
-	for (size_t i = 0; i < thread_count; ++i) {
+	for (int i = 0; i < thread_count; ++i) {
 		threads_ioc.create_thread(boost::bind(&boost::asio::io_context::run, &io_context));
 	}
 
