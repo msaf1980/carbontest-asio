@@ -64,19 +64,18 @@ void ClientTCP::start() {
 	start_connect();
 
 	// Start the deadline actor.
-	deadline_.async_wait(boost::bind(&ClientTCP::check_deadline, this));
+	// deadline_.async_wait(boost::bind(&ClientTCP::check_deadline, this));
 }
 
 void ClientTCP::stop() {
-	boost::system::error_code ec;
 	stopped_ = true;
 	boost::asio::post(*io_context_, [this]() {
+		boost::system::error_code ec;
 		if (socket_.is_open()) {
-			boost::system::error_code ec;
 			socket_.close(ec);
 		}
+		deadline_.cancel(ec);
 	});
-	deadline_.cancel();
 }
 
 void ClientTCP::check_deadline() {
@@ -98,17 +97,14 @@ void ClientTCP::check_deadline() {
 		// deadline is set.
 		deadline_.expires_at(steady_timer::time_point::max());
 	}
-
-	// Put the actor back to sleep.
-	deadline_.async_wait(boost::bind(&ClientTCP::check_deadline, this));
 }
 
 void ClientTCP::do_reconnect() {
 	if (stopped_)
 		return;
-	deadline_.cancel();
+	boost::system::error_code ec;
+	deadline_.cancel(ec);
 	if (socket_.is_open()) {
-		boost::system::error_code ec;
 		socket_.close(ec);
 	}
 	start_connect();
@@ -125,15 +121,16 @@ void ClientTCP::start_connect() {
 	tcp::endpoint endpoint(boost::asio::ip::address::from_string(config_.Host),
 	                       config_.Port);
 	// Set a deadline for the connect operation.
-	// deadline_.expires_after(std::chrono::milliseconds(config_->ConTimeout));
-
 	deadline_.expires_after(
 	    boost::asio::chrono::milliseconds(config_.ConTimeout));
+
 	// Start the asynchronous connect operation.
 	socket_.async_connect(endpoint, [this](boost::system::error_code ec) {
 		auto end = TIME_NOW;
-		deadline_.cancel();
-		NetStatSet(stat_, ec, start_, end);
+
+		boost::system::error_code ec_ignored;
+		// deadline_.cancel(ec);
+		NetStatSet(stat_, ec_ignored, start_, end);
 		stat_.Size = 0;
 		if (!socket_.is_open()) {
 			// If the socket is closed at this time then
@@ -155,6 +152,8 @@ void ClientTCP::start_connect() {
 			}
 		}
 	});
+
+	check_deadline();
 }
 
 void ClientTCP::do_write() {
@@ -174,9 +173,12 @@ void ClientTCP::do_write() {
 	          timeStamp % 60 + stat_.Id, timeStamp);
 
 	deadline_.expires_after(boost::asio::chrono::milliseconds(config_.Timeout));
+
 	boost::asio::async_write(
 	    socket_, boost::asio::buffer(out.data(), out.size()),
 	    boost::bind(&ClientTCP::handle_write, this, _1, _2));
+
+	check_deadline();
 }
 
 void ClientTCP::handle_write(const boost::system::error_code &ec,

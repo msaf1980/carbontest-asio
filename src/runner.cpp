@@ -93,12 +93,11 @@ void runClients(const Config &config) {
 	boost::asio::io_context io_context;
 	boost::asio::io_service::work work(io_context);
 
-	int clientsCount = 0;
-	vector<ClientTCP> clientsTCP;
+	vector<std::shared_ptr<ClientTCP>> clientsTCP;
 	// vector<ClientUDP> clientsUDP;
 
 	if (config.Workers > 0) {
-		clientsTCP.reserve(config.Workers);
+		clientsTCP.resize(config.Workers);
 	}
 
 	boost::thread thread_q;
@@ -119,9 +118,8 @@ void runClients(const Config &config) {
 	LOG_INFO << "Thread count " << thread_count;
 
 	for (int i = 0; i < config.Workers; i++) {
-		ClientTCP c(io_context, config, i, queue);
-		clientsTCP.push_back(std::move(c));
-		clientsTCP[i].start();
+		clientsTCP[i] = std::make_shared<ClientTCP>(io_context, config, i, queue);
+		clientsTCP[i]->start();
 	}
 
 	start = TIME_NOW;
@@ -137,14 +135,17 @@ void runClients(const Config &config) {
 	}
 
 	LOG_INFO << "Shutting down";
+	for (int i = 0; i < config.Workers; i++) {
+		clientsTCP[i]->stop();
+	}
+	end = TIME_NOW;
 
 	io_context.stop();
 
 	running.store(false);
-	end = TIME_NOW;
 
-	thread_q.join();
 	threads_ioc.join_all();
+	thread_q.join();
 
 	using float_seconds = std::chrono::duration<double>;
 	auto duration =
