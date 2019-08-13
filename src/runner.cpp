@@ -2,12 +2,12 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <vector>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/use_future.hpp>
-#include <boost/fiber/barrier.hpp>
 
 #include <plog/Appenders/ConsoleAppender.h>
 #include <plog/Log.h>
@@ -20,11 +20,13 @@
 using boost::thread;
 using boost::asio::ip::tcp;
 using boost::asio::ip::udp;
-using boost::fibers::barrier;
+
+using std::map;
 using std::string;
+using std::vector;
 
 chrono_clock start, end;
-std::map<string, uint64_t> stat_count;
+map<string, uint64_t> stat_count;
 
 void dequeueStat(const Config &config, std::fstream &file,
                  NetStatQueue &queue) {
@@ -45,7 +47,7 @@ void dequeueStat(const Config &config, std::fstream &file,
 	}
 }
 
-void dequeueThread(const Config &config, barrier &wb, NetStatQueue &queue) {
+void dequeueThread(const Config &config, NetStatQueue &queue) {
 	LOG_VERBOSE << "Starting dequeue thread";
 	try {
 		std::fstream file;
@@ -62,17 +64,11 @@ void dequeueThread(const Config &config, barrier &wb, NetStatQueue &queue) {
 		if (file.fail()) {
 			throw std::runtime_error(config.StatFile + " " + strerror(errno));
 		}
-		wb.wait();
 
 		while (running.load()) {
 			dequeueStat(config, file, queue);
 			boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 		}
-
-		wb.wait();
-
-		end = TIME_NOW;
-		dequeueStat(config, file, queue);
 
 		file.close();
 	} catch (std::exception &e) {
@@ -90,53 +86,71 @@ void runClients(const Config &config) {
 	LOG_INFO << "Starting with " << config.Workers << " TCP clients and "
 	         << config.UWorkers << " UDP clients";
 
-	int threadsCount = config.Workers + config.UWorkers;
-
 	NetStatQueue queue;
 
-	Thread *threads = new Thread[threadsCount];
+	boost::asio::io_context io_context;
+	boost::asio::io_service::work work(io_context);
+
+	vector<std::shared_ptr<ClientTCP>> clientsTCP;
+	vector<std::shared_ptr<ClientUDP>> clientsUDP;
+
+	if (config.Workers > 0) {
+		clientsTCP.resize(config.Workers);
+	}
+	if (config.UWorkers > 0) {
+		clientsUDP.resize(config.UWorkers);
+	}
+
 	boost::thread thread_q;
-	int last = 0;
 
 	running.store(true);
-	barrier wb(threadsCount + 2);
 
-	thread_q = thread(dequeueThread, std::ref(config), std::ref(wb), std::ref(queue));
+	thread_q =
+	    thread(dequeueThread, std::ref(config), std::ref(queue));
 
 	boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	if (!running.load())
 		return;
 
+	int thread_count = config.Threads;
+	if (thread_count > 3)
+		thread_count--;
+	LOG_INFO << "Thread count " << thread_count;
+
 	for (int i = 0; i < config.Workers; i++) {
-		threads[last].data.Id = i;
-		threads[last].t =
-		    thread(clientTCPThread, std::ref(config),
-		           std::ref(threads[last].data), std::ref(wb), std::ref(queue));
-		last++;
+		clientsTCP[i] = std::make_shared<ClientTCP>(io_context, config, i, queue);
+		clientsTCP[i]->start();
 	}
 	for (int i = 0; i < config.UWorkers; i++) {
-		threads[last].data.Id = i;
-		threads[last].t =
-		    thread(clientUDPThread, std::ref(config),
-		           std::ref(threads[last].data), std::ref(wb), std::ref(queue));
-		last++;
+		clientsUDP[i] = std::make_shared<ClientUDP>(io_context, config, i, queue);
+		clientsUDP[i]->start();
 	}
 
-	wb.wait(); // wait for start
 	start = TIME_NOW;
+
+	boost::thread_group threads_ioc;
+	for (int i = 0; i < thread_count; ++i) {
+		threads_ioc.create_thread(
+		    boost::bind(&boost::asio::io_context::run, &io_context));
+	}
+
 	for (int i = 0; running.load() && i < config.Duration * 10; i++) {
 		boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	}
 
 	LOG_INFO << "Shutting down";
-	running.store(false);
-	wb.wait(); // wait for end
-
-	for (int i = 0; i < last; i++) {
-		threads[i].t.join();
+	for (int i = 0; i < config.Workers; i++) {
+		clientsTCP[i]->stop();
 	}
+	end = TIME_NOW;
+
+	io_context.stop();
+
+	running.store(false);
+
+	threads_ioc.join_all();
 	thread_q.join();
-	delete[] threads;
+
 	using float_seconds = std::chrono::duration<double>;
 	auto duration =
 	    std::chrono::duration_cast<float_seconds>(end - start).count();

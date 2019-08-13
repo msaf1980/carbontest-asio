@@ -17,6 +17,8 @@ struct Config {
 
 	int Duration; // Test duration in seconds
 
+	int Threads; // Threads count
+
 	int Workers;      // TCP Workers
 	int MetricPerCon; // Metrics, sended in one connection (TCP)
 

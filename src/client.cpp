@@ -4,18 +4,11 @@
 #include <chrono>
 #include <iostream>
 #include <string>
-//#include <thread>
 #include <chrono>
 
 #include <cstring>
 
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/ip/basic_resolver_query.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/ip/udp.hpp>
-#include <boost/asio/use_future.hpp>
-
-#include <boost/asio/buffer.hpp>
+#include <boost/asio.hpp>
 
 #include <concurrentqueue.h>
 
@@ -39,6 +32,10 @@ NetErr NetErrorFromEc(const boost::system::error_code &ec) {
 			return NetErr::RESET;
 		case boost::system::errc::broken_pipe:
 			return NetErr::PIPE;
+		case boost::asio::error::timed_out:
+		case boost::asio::error::operation_aborted:
+		case boost::asio::error::connection_aborted:
+			return NetErr::TIMEOUT;
 		default:
 			return NetErr::ERROR;
 			// enum NetErr { PIPE, TIMEOUT, UNREACHEABLE, LOOKUP, REFUSED, RESET
@@ -60,146 +57,202 @@ void NetStatSet(NetStat &stat, const boost::system::error_code &ec,
 	        .count();
 }
 
-void set_timeout_ms(struct timeval *tv, int ms) {
-	tv->tv_sec = ms / 1000;
-	tv->tv_usec = ms % 1000 * 1000;
-}
+NetProto Client ::getProto() { return stat_.Proto; }
 
-int set_recv_timeout(int sock_fd, struct timeval *tv) {
-	return setsockopt(sock_fd, SOL_SOCKET, SO_RCVTIMEO, &tv,
-	                  sizeof(struct timeval));
-}
+//###########################################################
+// ClientTCP
 
-int set_send_timeout(int sock_fd, struct timeval *tv) {
-	return setsockopt(sock_fd, SOL_SOCKET, SO_SNDTIMEO, tv,
-	                  sizeof(struct timeval));
-}
+void ClientTCP::start() { start_connect(); }
 
-void clientTCPThread(const Config &config, ClientData &data, barrier &wb,
-                     NetStatQueue &queue) {
-	wb.wait();
-	LOG_VERBOSE << "Starting TCP thread " << data.Id;
-	try {
-		boost::asio::io_context io_context;
+void ClientTCP::stop() {
+	stopped_ = true;
+	boost::asio::post(*io_context_, [this]() {
 		boost::system::error_code ec;
-		tcp::endpoint endpoint(
-		    boost::asio::ip::address::from_string(config.Host), config.Port);
-		tcp::socket socket(io_context);
+		if (socket_.is_open()) {
+			socket_.close(ec);
+		}
+		deadline_.cancel(ec);
+	});
+}
 
-		string metricPrefix =
-		    fmt::format("{:s}.{:d}", config.MetricPrefix, data.Id);
+void ClientTCP::check_deadline() {
+	if (stopped_)
+		return;
 
-		NetStat stat;
-		stat.Id = data.Id;
-		stat.Proto = NetProto::TCP;
+	// Check whether the deadline has passed. We compare the deadline against
+	// the current time since a new asynchronous operation may have moved the
+	// deadline before this actor had a chance to run.
+	if (deadline_.expiry() <= steady_timer::clock_type::now()) {
+		// The deadline has passed. The socket is closed so that any outstanding
+		// asynchronous operations are cancelled.
+		if (socket_.is_open()) {
+			boost::system::error_code ec;
+			socket_.close(ec);
+		}
+		// There is no longer an active deadline. The expiry is set to the
+		// maximum time point so that the actor takes no action until a new
+		// deadline is set.
+		deadline_.expires_at(steady_timer::time_point::max());
+	}
+}
 
-		struct timeval con_timeout;
-		set_timeout_ms(&con_timeout, config.ConTimeout);
-		struct timeval timeout;
-		set_timeout_ms(&timeout, config.Timeout);
+void ClientTCP::do_reconnect() {
+	if (stopped_)
+		return;
+	boost::system::error_code ec;
+	deadline_.cancel(ec);
+	if (socket_.is_open()) {
+		socket_.close(ec);
+	}
+	start_connect();
+}
 
-		while (running.load()) {
-			fmt::memory_buffer out;
-			format_to(out, "{:s} {:d} {:d}\n", metricPrefix, 1, 12);
-			mutable_buffer buf(out.data(), out.size());
-			
-			set_recv_timeout(socket.native_handle(), &con_timeout);
-			set_send_timeout(socket.native_handle(), &con_timeout);
-			auto start = TIME_NOW;
-			socket.connect(endpoint, ec);
-			auto end = TIME_NOW;
-			stat.Type = NetOper::CONNECT;
-			NetStatSet(stat, ec, start, end);
-			stat.Size = 0;
-			queue.enqueue(stat);
+void ClientTCP::start_connect() {
+	if (stopped_)
+		return;
+
+	LOG_VERBOSE << "Starting TCP session " << stat_.Id;
+	stat_.Type = NetOper::CONNECT;
+	start_ = TIME_NOW;
+
+	tcp::endpoint endpoint(boost::asio::ip::address::from_string(config_.Host),
+	                       config_.Port);
+	// Set a deadline for the connect operation.
+	deadline_.expires_after(
+	    boost::asio::chrono::milliseconds(config_.ConTimeout));
+
+	// Start the asynchronous connect operation.
+	socket_.async_connect(endpoint, [this](boost::system::error_code ec) {
+		auto end = TIME_NOW;
+
+		boost::system::error_code ec_ignored;
+		// deadline_.cancel(ec);
+		NetStatSet(stat_, ec_ignored, start_, end);
+		stat_.Size = 0;
+		if (!socket_.is_open()) {
+			// If the socket is closed at this time then
+			// the timeout handler must have run first.
+			stat_.Error = NetErr::TIMEOUT;
+			queue_->enqueue(stat_);
+			start_connect();
+		} else {
+			NetStatSet(stat_, ec, start_, end);
+			queue_->enqueue(stat_);
 			if (ec) {
-				if (stat.Error == NetErr::ERROR) {
-					LOG_VERBOSE << "TCP thread " << data.Id
-					            << " connect: " << ec.message();
+				if (stat_.Error == NetErr::ERROR) {
+					LOG_WARNING << "Connect TCP session " << stat_.Id
+					            << " error unknown: " << ec.message();
 				}
+				do_reconnect();
 			} else {
-				set_recv_timeout(socket.native_handle(), &timeout);
-				set_send_timeout(socket.native_handle(), &timeout);
-				auto start = TIME_NOW;
-				stat.Size = socket.write_some(buf, ec);
-				auto end = TIME_NOW;
-				stat.Type = NetOper::SEND;
-				NetStatSet(stat, ec, start, end);
-				if (ec) {
-					stat.Size = 0;
-					if (stat.Error == NetErr::ERROR) {
-						LOG_VERBOSE << "TCP thread " << data.Id
-						            << " write: " << ec.message();
-					}
-				}
-				queue.enqueue(stat);
-				socket.close(ec);
+				do_write();
 			}
 		}
-	} catch (std::exception &e) {
-		// log fatal error
-		LOG_ERROR << "TCP thread " << data.Id << ": " << e.what();
-	}
-	wb.wait();
-	LOG_VERBOSE << "Shutdown TCP thread " << data.Id;
+	});
+
+	check_deadline();
 }
 
-void clientUDPThread(const Config &config, ClientData &data, barrier &wb,
-                     NetStatQueue &queue) {
-	wb.wait();
-	LOG_VERBOSE << "Starting UDP thread " << data.Id;
-	try {
-		boost::asio::io_context io_context;
-		boost::system::error_code ec;
-		udp::endpoint endpoint(
-		    boost::asio::ip::address::from_string(config.Host), config.Port);
-		udp::socket socket(io_context);
+void ClientTCP::do_write() {
+	if (stopped_)
+		return;
 
-		string metricPrefix =
-		    fmt::format("{:s}.{:d}", config.MetricPrefix, data.Id);
+	LOG_VERBOSE << "Write TCP session " << stat_.Id;
+	stat_.Type = NetOper::SEND;
+	start_ = TIME_NOW;
 
-		NetStat stat;
-		stat.Id = data.Id;
-		stat.Proto = NetProto::UDP;
+	fmt::memory_buffer out;
 
-		while (running.load()) {
-			fmt::memory_buffer out;
-			format_to(out, "{:s} {:d} {:d}\n", metricPrefix, 1, 12);
-			mutable_buffer buf(out.data(), out.size());
-			auto start = TIME_NOW;
-			socket.open(udp::v4(), ec);
-			auto end = TIME_NOW;
-			stat.Type = NetOper::CONNECT;
-			NetStatSet(stat, ec, start, end);
-			stat.Size = 0;
-			queue.enqueue(stat);
-			if (ec) {
-				// An error occurred.
-				if (stat.Error == NetErr::ERROR) {
-					LOG_ERROR << "UDP thread " << data.Id
-					          << " connect: " << ec.message();
-				}
-			} else {
-				auto start = TIME_NOW;
-				stat.Size = socket.send_to(buf, endpoint, 0, ec);
-				auto end = TIME_NOW;
-				stat.Type = NetOper::SEND;
-				NetStatSet(stat, ec, start, end);
-				if (ec) {
-					stat.Size = 0;
-					if (stat.Error == NetErr::ERROR) {
-						LOG_ERROR << "UDP thread " << data.Id
-						          << " write: " << ec.message();
-					}
-				}
-				socket.close(ec);
-				queue.enqueue(stat);
+	auto timeStamp = std::chrono::duration_cast<std::chrono::seconds>(
+	                     start_.time_since_epoch())
+	                     .count();
+	format_to(out, "{:s}.{:d} {:d} {:d}\n", config_.MetricPrefix, stat_.Id,
+	          timeStamp % 60 + stat_.Id, timeStamp);
+
+	deadline_.expires_after(boost::asio::chrono::milliseconds(config_.Timeout));
+
+	boost::asio::async_write(
+	    socket_, boost::asio::buffer(out.data(), out.size()),
+	    boost::bind(&ClientTCP::handle_write, this, _1, _2));
+
+	check_deadline();
+}
+
+void ClientTCP::handle_write(const boost::system::error_code &ec,
+                             std::size_t                      length) {
+	auto end = TIME_NOW;
+	NetStatSet(stat_, ec, start_, end);
+	if (!socket_.is_open()) {
+		// If the socket is closed at this time then
+		// the timeout handler must have run first.
+		stat_.Error = NetErr::TIMEOUT;
+		queue_->enqueue(stat_);
+		start_connect();
+	} else {
+		if (ec) {
+			if (stat_.Error == NetErr::ERROR) {
+				LOG_WARNING << "Write TCP session " << stat_.Id
+				            << " error unknown: " << ec.message();
 			}
+			stat_.Size = 0;
+			queue_->enqueue(stat_);
+			do_reconnect();
+		} else {
+			LOG_VERBOSE << "Write TCP session " << stat_.Id
+			            << " done: " << length;
+			stat_.Size = length;
+			queue_->enqueue(stat_);
+			do_reconnect();
 		}
-	} catch (std::exception &e) {
-		// log fatal error
-		LOG_ERROR << "TCP thread " << data.Id << ": " << e.what();
 	}
-	wb.wait();
-	LOG_VERBOSE << "Shutdown UDP thread " << data.Id;
+}
+
+//###########################################################
+// ClientUDP
+
+void ClientUDP::start() { do_write(); }
+
+void ClientUDP::stop() { stopped_ = true; }
+
+void ClientUDP::do_write() {
+	if (stopped_)
+		return;
+
+	LOG_VERBOSE << "Write UDP session " << stat_.Id;
+	stat_.Type = NetOper::SEND;
+	start_ = TIME_NOW;
+
+	fmt::memory_buffer out;
+
+	auto timeStamp = std::chrono::duration_cast<std::chrono::seconds>(
+	                     start_.time_since_epoch())
+	                     .count();
+	format_to(out, "{:s}.{:d} {:d} {:d}\n", config_.MetricPrefix, stat_.Id,
+	          timeStamp % 60 + stat_.Id, timeStamp);
+
+	udp::socket   socket(*io_context_, udp::endpoint(udp::v4(), 0));
+	udp::endpoint endpoint(boost::asio::ip::address::from_string(config_.Host),
+	                       config_.Port);
+
+	socket.async_send_to(boost::asio::buffer(out.data(), out.size()), endpoint,
+	                     boost::bind(&ClientUDP::handle_write, this, _1, _2));
+}
+
+void ClientUDP::handle_write(const boost::system::error_code &ec,
+                             std::size_t                      length) {
+	auto end = TIME_NOW;
+	NetStatSet(stat_, ec, start_, end);
+	if (ec) {
+		if (stat_.Error == NetErr::ERROR) {
+			LOG_WARNING << "Write TCP session " << stat_.Id
+			            << " error unknown: " << ec.message();
+		}
+		stat_.Size = 0;
+		queue_->enqueue(stat_);
+	} else {
+		LOG_VERBOSE << "Write TCP session " << stat_.Id << " done: " << length;
+		stat_.Size = length;
+		queue_->enqueue(stat_);
+	}
+	do_write();
 }

@@ -13,13 +13,13 @@ cmake_minimum_required( VERSION 3.5 )
 
 option(TEST      "Build tests" ON)
 option(BENCH     "Build benchmarks" OFF)
-option(SANITIZE  "Adds sanitize flags" OFF)
-option(TSANITIZE  "Adds thread sanitize flags" OFF)
+option(ASAN      "Adds sanitize flags" OFF)
+option(TSAN      "Adds thread sanitize flags" OFF)
 option(CONAN     "Enable conan package manager" ON)
 #option(USE_COTIRE "Enable cutire build" ON)
 
-if(SANITIZE)
-  set(TSANITIZE OFF)
+if(ASAN)
+  set(TSAN OFF)
 endif()
 
 if(BENCH)
@@ -43,7 +43,7 @@ if (NOT DEFINED LIBDIR)
 set( LIBDIR lib )
 endif()
 
-set( CMAKE_CXX_STANDARD 17 )
+set( CMAKE_CXX_STANDARD 14 )
 set( CMAKE_CXX_STANDARD_REQUIRED ON )
 set( CMAKE_CXX_EXTENSIONS OFF )
 
@@ -73,7 +73,7 @@ endif()
 
 include(${CMAKE_SOURCE_DIR}/conan.cmake)
 conan_cmake_run(CONANFILE conanfile.txt
-                BASIC_SETUP NO_OUTPUT_DIRS)
+                BASIC_SETUP NO_OUTPUT_DIRS BUILD missing)
 endif()
 ################################################################################
 
@@ -86,7 +86,6 @@ endforeach(cmakeFile)
 set ( LIBRARIES
     boost_system
     boost_thread
-    boost_fiber
     boost_context
     ${CONAN_LIBS_FMT}
     pthread
@@ -176,4 +175,9 @@ message(STATUS "")
 message(STATUS "  Install prefix : ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "  Binary dir     : ${BINDIR}")
 message(STATUS "  Lib dir        : ${LIBDIR}")
+message(STATUS "")
+message(STATUS "CMAKE_CXX_FLAGS            : ${CMAKE_CXX_FLAGS}")
+message(STATUS "CMAKE_C_FLAGS              : ${CMAKE_C_FLAGS}")
+message(STATUS "CMAKE_SHARED_LINKER_FLAGS  : ${CMAKE_SHARED_LINKER_FLAGS}")
+message(STATUS "CMAKE_EXE_LINKER_FLAGS     : ${CMAKE_EXE_LINKER_FLAGS}")
 message(STATUS "")

@@ -1,7 +1,8 @@
 Instructions for build
 
-Prepare conan repos
+Install conan and prepare conan repos
 $
+pip install conan --user
 conan remote add conan-center "https://conan.bintray.com"
 
 git clone https://github.com/darcamo/conan-cxxopts
@@ -14,7 +15,9 @@ cd .. && rm -rf conan-plog
 
 Build
 $
+git submodule init
+git submodule update
+
 mkdir target
-conan install ..
-cmake ..
+cmake -DCMAKE_BUILD_TYPE=Release ..
 cmake --build .
