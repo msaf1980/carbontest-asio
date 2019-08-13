@@ -26,21 +26,15 @@ class Client {
 	NetProto getProto();
 
   protected:
-	NetProto     proto_; // protocol (also used as class ID)
-	NetStat      stat_;  // connection stat
+	NetProto proto_;     // protocol (also used as class ID)
+	NetStat stat_;       // connection stat
 	chrono_clock start_; // start of last operation
 };
 
 class ClientTCP : public Client {
   public:
 	ClientTCP(boost::asio::io_context &io_context, const Config &config,
-	          size_t id, NetStatQueue &queue)
-	    : config_(config), io_context_(&io_context), socket_(io_context),
-	      queue_(&queue), deadline_(io_context) {
-		stat_.Proto = NetProto::TCP;
-		stat_.Id = id;
-	}
-
+	          size_t id, NetStatQueue &queue);
 	void start();
 	void stop();
 	void check_deadline();
@@ -51,21 +45,20 @@ class ClientTCP : public Client {
 	void do_write();
 	void handle_write(const boost::system::error_code &ec, std::size_t length);
 
-	bool                     stopped_ = false;
-	const Config             config_;
+	bool stopped_ = false;
+	const Config config_;
 	boost::asio::io_context *io_context_;
-	tcp::socket              socket_;
-	NetStatQueue *           queue_;
-	steady_timer             deadline_;
-	char                     buf_[MAX_MESSAGE_LEN];
+	tcp::socket socket_;
+	NetStatQueue *queue_;
+	steady_timer deadline_;
+	char buf_[MAX_MESSAGE_LEN];
 };
 
 class ClientUDP : public Client {
   public:
 	ClientUDP(boost::asio::io_context &io_context, const Config &config,
 	          size_t id, NetStatQueue &queue)
-	    : config_(config), io_context_(&io_context),
-	      queue_(&queue) {
+	    : config_(config), io_context_(&io_context), queue_(&queue) {
 		stat_.Proto = NetProto::UDP;
 		stat_.Id = id;
 	}
@@ -78,11 +71,11 @@ class ClientUDP : public Client {
 	void do_write();
 	void handle_write(const boost::system::error_code &ec, std::size_t length);
 
-	bool                     stopped_ = false;
-	const Config             config_;
+	bool stopped_ = false;
+	const Config config_;
 	boost::asio::io_context *io_context_;
-	NetStatQueue *           queue_;
-	char                     buf_[MAX_MESSAGE_LEN];
+	NetStatQueue *queue_;
+	char buf_[MAX_MESSAGE_LEN];
 };
 
 #endif /* _CLIENT_HPP_ */

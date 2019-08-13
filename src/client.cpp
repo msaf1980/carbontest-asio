@@ -4,7 +4,6 @@
 #include <chrono>
 #include <iostream>
 #include <string>
-#include <chrono>
 
 #include <cstring>
 
@@ -61,6 +60,14 @@ NetProto Client ::getProto() { return stat_.Proto; }
 
 //###########################################################
 // ClientTCP
+ClientTCP::ClientTCP(boost::asio::io_context &io_context, const Config &config,
+                     size_t id, NetStatQueue &queue)
+    : config_(config), io_context_(&io_context), socket_(io_context),
+      queue_(&queue), deadline_(io_context) {
+	stat_.Proto = NetProto::TCP;
+	stat_.Id = id;
+	socket_.set_option(tcp::acceptor::reuse_address(true));
+}
 
 void ClientTCP::start() { start_connect(); }
 
@@ -179,7 +186,7 @@ void ClientTCP::do_write() {
 }
 
 void ClientTCP::handle_write(const boost::system::error_code &ec,
-                             std::size_t                      length) {
+                             std::size_t length) {
 	auto end = TIME_NOW;
 	NetStatSet(stat_, ec, start_, end);
 	if (!socket_.is_open()) {
@@ -230,7 +237,7 @@ void ClientUDP::do_write() {
 	format_to(out, "{:s}.{:d} {:d} {:d}\n", config_.MetricPrefix, stat_.Id,
 	          timeStamp % 60 + stat_.Id, timeStamp);
 
-	udp::socket   socket(*io_context_, udp::endpoint(udp::v4(), 0));
+	udp::socket socket(*io_context_, udp::endpoint(udp::v4(), 0));
 	udp::endpoint endpoint(boost::asio::ip::address::from_string(config_.Host),
 	                       config_.Port);
 
@@ -239,7 +246,7 @@ void ClientUDP::do_write() {
 }
 
 void ClientUDP::handle_write(const boost::system::error_code &ec,
-                             std::size_t                      length) {
+                             std::size_t length) {
 	auto end = TIME_NOW;
 	NetStatSet(stat_, ec, start_, end);
 	if (ec) {
