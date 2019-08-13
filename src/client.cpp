@@ -66,7 +66,10 @@ ClientTCP::ClientTCP(boost::asio::io_context &io_context, const Config &config,
       queue_(&queue), deadline_(io_context) {
 	stat_.Proto = NetProto::TCP;
 	stat_.Id = id;
-	socket_.set_option(tcp::acceptor::reuse_address(true));
+	// socket_.set_option(tcp::acceptor::reuse_address(true));
+	int enable = 1;
+	setsockopt(socket_.native_handle(), SOL_SOCKET, SO_REUSEADDR, &enable,
+	           sizeof(enable));
 }
 
 void ClientTCP::start() { start_connect(); }
@@ -110,6 +113,7 @@ void ClientTCP::do_reconnect() {
 	deadline_.cancel(ec);
 	if (socket_.is_open()) {
 		socket_.close(ec);
+		LOG_VERBOSE << "Close TCP session " << stat_.Id;
 	}
 	start_connect();
 }
