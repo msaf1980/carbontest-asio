@@ -49,7 +49,7 @@ void dequeueStat(const Config &config, std::fstream &file,
 	}
 }
 
-void dequeueThread(const Config &config, barrier &wb, NetStatQueue &queue) {
+void dequeueThread(const Config &config, NetStatQueue &queue) {
 	LOG_VERBOSE << "Starting dequeue thread";
 	try {
 		std::fstream file;
@@ -94,19 +94,21 @@ void runClients(const Config &config) {
 	boost::asio::io_service::work work(io_context);
 
 	vector<std::shared_ptr<ClientTCP>> clientsTCP;
-	// vector<ClientUDP> clientsUDP;
+	vector<std::shared_ptr<ClientUDP>> clientsUDP;
 
 	if (config.Workers > 0) {
 		clientsTCP.resize(config.Workers);
+	}
+	if (config.UWorkers > 0) {
+		clientsUDP.resize(config.UWorkers);
 	}
 
 	boost::thread thread_q;
 
 	running.store(true);
-	barrier wb(2);
 
 	thread_q =
-	    thread(dequeueThread, std::ref(config), std::ref(wb), std::ref(queue));
+	    thread(dequeueThread, std::ref(config), std::ref(queue));
 
 	boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	if (!running.load())
@@ -120,6 +122,10 @@ void runClients(const Config &config) {
 	for (int i = 0; i < config.Workers; i++) {
 		clientsTCP[i] = std::make_shared<ClientTCP>(io_context, config, i, queue);
 		clientsTCP[i]->start();
+	}
+	for (int i = 0; i < config.UWorkers; i++) {
+		clientsUDP[i] = std::make_shared<ClientUDP>(io_context, config, i, queue);
+		clientsUDP[i]->start();
 	}
 
 	start = TIME_NOW;

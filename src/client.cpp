@@ -60,12 +60,10 @@ void NetStatSet(NetStat &stat, const boost::system::error_code &ec,
 
 NetProto Client ::getProto() { return stat_.Proto; }
 
-void ClientTCP::start() {
-	start_connect();
+//###########################################################
+// ClientTCP
 
-	// Start the deadline actor.
-	// deadline_.async_wait(boost::bind(&ClientTCP::check_deadline, this));
-}
+void ClientTCP::start() { start_connect(); }
 
 void ClientTCP::stop() {
 	stopped_ = true;
@@ -268,4 +266,54 @@ void clientUDPThread(const Config &config, ClientData &data, barrier &wb,
 	}
 	wb.wait();
 	LOG_VERBOSE << "Shutdown UDP thread " << data.Id;
+}
+
+//###########################################################
+// ClientUDP
+
+void ClientUDP::start() { do_write(); }
+
+void ClientUDP::stop() { stopped_ = true; }
+
+void ClientUDP::do_write() {
+	if (stopped_)
+		return;
+
+	LOG_VERBOSE << "Write UDP session " << stat_.Id;
+	stat_.Type = NetOper::SEND;
+	start_ = TIME_NOW;
+
+	fmt::memory_buffer out;
+
+	auto timeStamp = std::chrono::duration_cast<std::chrono::seconds>(
+	                     start_.time_since_epoch())
+	                     .count();
+	format_to(out, "{:s}.{:d} {:d} {:d}\n", config_.MetricPrefix, stat_.Id,
+	          timeStamp % 60 + stat_.Id, timeStamp);
+
+	udp::socket   socket(*io_context_, udp::endpoint(udp::v4(), 0));
+	udp::endpoint endpoint(boost::asio::ip::address::from_string(config_.Host),
+	                       config_.Port);
+
+	socket.async_send_to(boost::asio::buffer(out.data(), out.size()), endpoint,
+	                     boost::bind(&ClientUDP::handle_write, this, _1, _2));
+}
+
+void ClientUDP::handle_write(const boost::system::error_code &ec,
+                             std::size_t                      length) {
+	auto end = TIME_NOW;
+	NetStatSet(stat_, ec, start_, end);
+	if (ec) {
+		if (stat_.Error == NetErr::ERROR) {
+			LOG_WARNING << "Write TCP session " << stat_.Id
+			            << " error unknown: " << ec.message();
+		}
+		stat_.Size = 0;
+		queue_->enqueue(stat_);
+	} else {
+		LOG_VERBOSE << "Write TCP session " << stat_.Id << " done: " << length;
+		stat_.Size = length;
+		queue_->enqueue(stat_);
+	}
+	do_write();
 }
