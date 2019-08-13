@@ -22,11 +22,11 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 		("h,help", "Print help")
 		("l,loglevel", "Log level",
 	                      cxxopts::value<string>()->default_value("INFO"))
-		("H,host", "IP Address to connect",
+		("host", "IP Address to connect",
 	                      cxxopts::value<string>()->default_value("127.0.0.1"))
-		("p,port", "Port to connect",
+		("port", "Port to connect",
 	                      cxxopts::value<int>()->default_value("2003"))
-		("P,prefix", "Metric prefix",
+		("p,prefix", "Metric prefix",
 	                      cxxopts::value<string>()->default_value("test"))
 		("d,duration", "Test duration (in seconds)",
 	                      cxxopts::value<int>()->default_value("10"))

@@ -69,7 +69,7 @@ ClientTCP::ClientTCP(boost::asio::io_context &io_context, const Config &config,
 	// socket_.set_option(tcp::acceptor::reuse_address(true));
 	int enable = 1;
 	setsockopt(socket_.native_handle(), SOL_SOCKET, SO_REUSEADDR, &enable,
-	           sizeof(enable));
+			   sizeof(enable));
 }
 
 void ClientTCP::start() { start_connect(); }
