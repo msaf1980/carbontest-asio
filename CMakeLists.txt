@@ -43,7 +43,7 @@ if (NOT DEFINED LIBDIR)
 set( LIBDIR lib )
 endif()
 
-set( CMAKE_CXX_STANDARD 17 )
+set( CMAKE_CXX_STANDARD 14 )
 set( CMAKE_CXX_STANDARD_REQUIRED ON )
 set( CMAKE_CXX_EXTENSIONS OFF )
 
@@ -86,7 +86,6 @@ endforeach(cmakeFile)
 set ( LIBRARIES
     boost_system
     boost_thread
-    boost_fiber
     boost_context
     ${CONAN_LIBS_FMT}
     pthread

@@ -8,7 +8,6 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/use_future.hpp>
-#include <boost/fiber/barrier.hpp>
 
 #include <plog/Appenders/ConsoleAppender.h>
 #include <plog/Log.h>
@@ -21,7 +20,6 @@
 using boost::thread;
 using boost::asio::ip::tcp;
 using boost::asio::ip::udp;
-using boost::fibers::barrier;
 
 using std::map;
 using std::string;

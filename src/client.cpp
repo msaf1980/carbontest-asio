@@ -4,7 +4,6 @@
 #include <chrono>
 #include <iostream>
 #include <string>
-//#include <thread>
 #include <chrono>
 
 #include <cstring>
@@ -206,66 +205,6 @@ void ClientTCP::handle_write(const boost::system::error_code &ec,
 			do_reconnect();
 		}
 	}
-}
-
-void clientUDPThread(const Config &config, ClientData &data, barrier &wb,
-                     NetStatQueue &queue) {
-	wb.wait();
-	LOG_VERBOSE << "Starting UDP thread " << data.Id;
-	try {
-		boost::asio::io_context   io_context;
-		boost::system::error_code ec;
-		udp::endpoint             endpoint(
-            boost::asio::ip::address::from_string(config.Host), config.Port);
-		udp::socket socket(io_context);
-
-		string metricPrefix =
-		    fmt::format("{:s}.{:d}", config.MetricPrefix, data.Id);
-
-		NetStat stat;
-		stat.Id = data.Id;
-		stat.Proto = NetProto::UDP;
-
-		while (running.load()) {
-			fmt::memory_buffer out;
-			format_to(out, "{:s} {:d} {:d}\n", metricPrefix, 1, 12);
-			mutable_buffer buf(out.data(), out.size());
-			auto           start = TIME_NOW;
-			socket.open(udp::v4(), ec);
-			auto end = TIME_NOW;
-			stat.Type = NetOper::CONNECT;
-			NetStatSet(stat, ec, start, end);
-			stat.Size = 0;
-			queue.enqueue(stat);
-			if (ec) {
-				// An error occurred.
-				if (stat.Error == NetErr::ERROR) {
-					LOG_ERROR << "UDP thread " << data.Id
-					          << " connect: " << ec.message();
-				}
-			} else {
-				auto start = TIME_NOW;
-				stat.Size = socket.send_to(buf, endpoint, 0, ec);
-				auto end = TIME_NOW;
-				stat.Type = NetOper::SEND;
-				NetStatSet(stat, ec, start, end);
-				if (ec) {
-					stat.Size = 0;
-					if (stat.Error == NetErr::ERROR) {
-						LOG_ERROR << "UDP thread " << data.Id
-						          << " write: " << ec.message();
-					}
-				}
-				socket.close(ec);
-				queue.enqueue(stat);
-			}
-		}
-	} catch (std::exception &e) {
-		// log fatal error
-		LOG_ERROR << "TCP thread " << data.Id << ": " << e.what();
-	}
-	wb.wait();
-	LOG_VERBOSE << "Shutdown UDP thread " << data.Id;
 }
 
 //###########################################################
