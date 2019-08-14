@@ -151,7 +151,7 @@ void ClientTCP::start_connect() {
 			queue_->enqueue(stat_);
 			if (ec) {
 				if (stat_.Error == NetErr::ERROR) {
-					LOG_WARNING << "Connect TCP session " << stat_.Id
+					LOG_DEBUG << "Connect TCP session " << stat_.Id
 					            << " error unknown: " << ec.message();
 				}
 				do_reconnect();
@@ -202,7 +202,7 @@ void ClientTCP::handle_write(const boost::system::error_code &ec,
 	} else {
 		if (ec) {
 			if (stat_.Error == NetErr::ERROR) {
-				LOG_WARNING << "Write TCP session " << stat_.Id
+				LOG_DEBUG << "Write TCP session " << stat_.Id
 				            << " error unknown: " << ec.message();
 			}
 			stat_.Size = 0;
