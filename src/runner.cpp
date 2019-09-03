@@ -4,7 +4,10 @@
 #include <map>
 #include <vector>
 
-#include <ev++.h>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ip/udp.hpp>
+#include <boost/asio/use_future.hpp>
 
 #include <plog/Appenders/ConsoleAppender.h>
 #include <plog/Log.h>
