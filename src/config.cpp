@@ -58,7 +58,7 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 		config.Threads = result[arg].as<int>();
 		if (config.Threads < 2)
 			config.Threads = boost::thread::hardware_concurrency();
-		 
+
 		arg = "workers";
 		config.Workers = result[arg].as<int>();
 		if (config.Workers < 0)
@@ -110,8 +110,7 @@ void parseArgs(Config &config, int argc, char *argv[]) {
 
 		arg = "loglevel";
 		string logLevel = result[arg].as<string>().c_str();
-		std::transform(logLevel.begin(), logLevel.end(),
-		               logLevel.begin(),
+		std::transform(logLevel.begin(), logLevel.end(), logLevel.begin(),
 		               [](unsigned char c) { return std::toupper(c); });
 		config.LogLevel = plog::severityFromString(logLevel.c_str());
 		if (config.LogLevel == plog::Severity::none)

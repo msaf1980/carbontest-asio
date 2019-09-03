@@ -88,8 +88,8 @@ void runClients(const Config &config) {
 
 	NetStatQueue queue;
 
-	boost::asio::io_context io_context;
-	boost::asio::io_service::work work(io_context);
+	vector<boost::asio::io_context> io_contexts;
+	// boost::asio::io_service::work work(io_context);
 
 	vector<std::shared_ptr<ClientTCP>> clientsTCP;
 	vector<std::shared_ptr<ClientUDP>> clientsUDP;
@@ -105,8 +105,7 @@ void runClients(const Config &config) {
 
 	running.store(true);
 
-	thread_q =
-	    thread(dequeueThread, std::ref(config), std::ref(queue));
+	thread_q = thread(dequeueThread, std::ref(config), std::ref(queue));
 
 	boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	if (!running.load())
@@ -117,13 +116,22 @@ void runClients(const Config &config) {
 		thread_count--;
 	LOG_INFO << "Thread count " << thread_count;
 
+	io_contexts.resize(thread_count);
+
+	int t = 0;
 	for (int i = 0; i < config.Workers; i++) {
-		clientsTCP[i] = std::make_shared<ClientTCP>(io_context, config, i, queue);
+		clientsTCP[i] =
+		    std::make_shared<ClientTCP>(io_contexts[t++], config, i, queue);
 		clientsTCP[i]->start();
+		if (t == thread_count)
+			t = 0;
 	}
 	for (int i = 0; i < config.UWorkers; i++) {
-		clientsUDP[i] = std::make_shared<ClientUDP>(io_context, config, i, queue);
+		clientsUDP[i] =
+		    std::make_shared<ClientUDP>(io_contexts[t++], config, i, queue);
 		clientsUDP[i]->start();
+		if (t == thread_count)
+			t = 0;
 	}
 
 	start = TIME_NOW;
@@ -131,7 +139,7 @@ void runClients(const Config &config) {
 	boost::thread_group threads_ioc;
 	for (int i = 0; i < thread_count; ++i) {
 		threads_ioc.create_thread(
-		    boost::bind(&boost::asio::io_context::run, &io_context));
+		    boost::bind(&boost::asio::io_context::run, &io_contexts[i]));
 	}
 
 	for (int i = 0; running.load() && i < config.Duration * 10; i++) {
@@ -144,7 +152,9 @@ void runClients(const Config &config) {
 	}
 	end = TIME_NOW;
 
-	io_context.stop();
+	for (int i = 0; i < thread_count; ++i) {
+		io_contexts[i].stop();
+	}
 
 	running.store(false);
 
