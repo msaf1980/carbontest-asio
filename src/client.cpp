@@ -69,7 +69,7 @@ ClientTCP::ClientTCP(boost::asio::io_context &io_context, const Config &config,
 	// socket_.set_option(tcp::acceptor::reuse_address(true));
 	int enable = 1;
 	setsockopt(socket_.native_handle(), SOL_SOCKET, SO_REUSEADDR, &enable,
-			   sizeof(enable));
+	           sizeof(enable));
 }
 
 void ClientTCP::start() { start_connect(); }
@@ -152,7 +152,7 @@ void ClientTCP::start_connect() {
 			if (ec) {
 				if (stat_.Error == NetErr::ERROR) {
 					LOG_DEBUG << "Connect TCP session " << stat_.Id
-					            << " error unknown: " << ec.message();
+					          << " error unknown: " << ec.message();
 				}
 				do_reconnect();
 			} else {
@@ -203,7 +203,7 @@ void ClientTCP::handle_write(const boost::system::error_code &ec,
 		if (ec) {
 			if (stat_.Error == NetErr::ERROR) {
 				LOG_DEBUG << "Write TCP session " << stat_.Id
-				            << " error unknown: " << ec.message();
+				          << " error unknown: " << ec.message();
 			}
 			stat_.Size = 0;
 			queue_->enqueue(stat_);
@@ -220,6 +220,13 @@ void ClientTCP::handle_write(const boost::system::error_code &ec,
 
 //###########################################################
 // ClientUDP
+
+ClientUDP::ClientUDP(boost::asio::io_context &io_context, const Config &config,
+                     size_t id, NetStatQueue &queue)
+    : config_(config), io_context_(&io_context), queue_(&queue) {
+	stat_.Proto = NetProto::UDP;
+	stat_.Id = id;
+}
 
 void ClientUDP::start() { do_write(); }
 

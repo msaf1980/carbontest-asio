@@ -57,12 +57,7 @@ class ClientTCP : public Client {
 class ClientUDP : public Client {
   public:
 	ClientUDP(boost::asio::io_context &io_context, const Config &config,
-	          size_t id, NetStatQueue &queue)
-	    : config_(config), io_context_(&io_context), queue_(&queue) {
-		stat_.Proto = NetProto::UDP;
-		stat_.Id = id;
-	}
-
+	          size_t id, NetStatQueue &queue);
 	void start();
 	void stop();
 	void check_deadline();

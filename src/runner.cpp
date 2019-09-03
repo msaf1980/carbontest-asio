@@ -4,10 +4,7 @@
 #include <map>
 #include <vector>
 
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/ip/udp.hpp>
-#include <boost/asio/use_future.hpp>
+#include <ev++.h>
 
 #include <plog/Appenders/ConsoleAppender.h>
 #include <plog/Log.h>
@@ -88,7 +85,6 @@ void runClients(const Config &config) {
 
 	NetStatQueue queue;
 
-	vector<boost::asio::io_context> io_contexts;
 	// boost::asio::io_service::work work(io_context);
 
 	vector<std::shared_ptr<ClientTCP>> clientsTCP;
@@ -116,7 +112,7 @@ void runClients(const Config &config) {
 		thread_count--;
 	LOG_INFO << "Thread count " << thread_count;
 
-	io_contexts.resize(thread_count);
+	vector<boost::asio::io_context> io_contexts(thread_count);
 
 	int t = 0;
 	for (int i = 0; i < config.Workers; i++) {
@@ -146,17 +142,23 @@ void runClients(const Config &config) {
 		boost::this_thread::sleep(boost::posix_time::milliseconds(100));
 	}
 
+	running.store(false);
+	end = TIME_NOW;
+
 	LOG_INFO << "Shutting down";
+
 	for (int i = 0; i < config.Workers; i++) {
 		clientsTCP[i]->stop();
 	}
-	end = TIME_NOW;
-
-	for (int i = 0; i < thread_count; ++i) {
-		io_contexts[i].stop();
+	for (int i = 0; i < config.UWorkers; i++) {
+		clientsUDP[i]->stop();
 	}
 
-	running.store(false);
+	//boost::this_thread::sleep_for(boost::chrono::milliseconds(config.Timeout));
+
+	//for (int i = 0; i < thread_count; ++i) {
+		//io_contexts[i].stop();
+	//}
 
 	threads_ioc.join_all();
 	thread_q.join();
