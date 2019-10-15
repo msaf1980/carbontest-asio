@@ -25,7 +25,7 @@ struct Config {
 	int UWorkers; // UDP Workers
 
 	// RateLimit    []int32
-	int SendDelay; // Send delay in milliseconds
+	int Delay; // Send delay in milliseconds
 
 	int ConTimeout;  // Connection timeout
 	int Timeout; // Send timeout

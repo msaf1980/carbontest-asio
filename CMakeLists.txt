@@ -56,7 +56,7 @@ endforeach(cmakeFile)
 
 #list( APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake )
 
-set ( PROJECT carbontestcpp )
+set ( PROJECT carbontest-asio )
 set ( BINARY ${PROJECT} )
 
 project( ${PROJECT} )

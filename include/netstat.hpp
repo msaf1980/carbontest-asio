@@ -9,7 +9,7 @@
 #include <concurrentqueue.h>
 
 enum NetOper { CONNECT, SEND, RECV }; // update NetiOperStr after change this
-extern const char * NetOperStr[];
+extern const char *NetOperStr[];
 
 enum NetErr {
 	OK = 0,
@@ -19,12 +19,13 @@ enum NetErr {
 	TIMEOUT,
 	REFUSED,
 	RESET,
-	UNREACHEABLE
+	UNREACHEABLE,
+	ASSIGN
 }; // update NetErrStr after change this
-extern const char * NetErrStr[];
+extern const char *NetErrStr[];
 
 enum NetProto { TCP = 0, UDP }; // update NetProtoStr after change this
-extern const char * NetProtoStr[];
+extern const char *NetProtoStr[];
 
 // Network operation statistic
 struct NetStat {
@@ -43,7 +44,8 @@ struct QueuePapam : moodycamel::ConcurrentQueueDefaultTraits {
 
 typedef moodycamel::ConcurrentQueue<NetStat, QueuePapam> NetStatQueue;
 
-typedef std::chrono::time_point<std::chrono::high_resolution_clock> chrono_clock;
+typedef std::chrono::time_point<std::chrono::high_resolution_clock>
+    chrono_clock;
 
 #define TIME_NOW std::chrono::high_resolution_clock::now()
 

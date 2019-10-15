@@ -52,6 +52,7 @@ class ClientTCP : public Client {
 	NetStatQueue *queue_;
 	steady_timer deadline_;
 	char buf_[MAX_MESSAGE_LEN];
+	size_t metrics_send;
 };
 
 class ClientUDP : public Client {

@@ -156,6 +156,7 @@ void ClientTCP::start_connect() {
 				}
 				do_reconnect();
 			} else {
+				metrics_send = 0;
 				do_write();
 			}
 		}
@@ -177,7 +178,7 @@ void ClientTCP::do_write() {
 	auto timeStamp = std::chrono::duration_cast<std::chrono::seconds>(
 	                     start_.time_since_epoch())
 	                     .count();
-	format_to(out, "{:s}.{:d} {:d} {:d}\n", config_.MetricPrefix, stat_.Id,
+	format_to(out, "{:s}.{:d}.{:d} {:d} {:d}\n", config_.MetricPrefix, stat_.Id, timeStamp,
 	          timeStamp % 60 + stat_.Id, timeStamp);
 
 	deadline_.expires_after(boost::asio::chrono::milliseconds(config_.Timeout));
@@ -213,7 +214,12 @@ void ClientTCP::handle_write(const boost::system::error_code &ec,
 			            << " done: " << length;
 			stat_.Size = length;
 			queue_->enqueue(stat_);
-			do_reconnect();
+			if (config_.MetricPerCon <= 1 || metrics_send >= (size_t) config_.MetricPerCon)
+				do_reconnect();
+			else {
+				metrics_send++;
+				do_write();
+			}
 		}
 	}
 }
